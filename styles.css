@@ -1,8 +1,37 @@
-/*
+.loom-children {
+  margin-left: 1em;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.loom-node {
+  display: flex;
+  align-items: center;
+}
 
-If your plugin does not need CSS, delete this file.
+.loom-node.is-active {
+  background-color: var(--nav-item-background-active);
+}
 
-*/
+.loom-node-inner {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loom-node-unread {
+  font-weight: bold !important;
+}
+
+.loom-node-unread-indicator {
+  width: 0.3em;
+  height: 0.3em;
+  border-radius: 50%;
+  background-color: var(--nav-item-color);
+  margin-right: 0.5em;
+  flex-shrink: 0;
+}
+
+.loom-icon {
+  display: inline-flex !important;
+  margin-left: 0.2em;
+  --icon-size: 1rem;
+}
