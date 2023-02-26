@@ -166,6 +166,21 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "loom-clone-current-node",
+      name: "Clone current node",
+      icon: "copy",
+      callback: () => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const state = this.state[file.path];
+
+        this.app.workspace.trigger("loom:clone", state.current);
+      },
+      hotkeys: [ { modifiers: ["Alt"], key: "c" } ],
+    });
+
+    this.addCommand({
       id: "loom-debug-reset-state",
       name: "Debug: Reset state",
       callback: async () => {
@@ -324,6 +339,26 @@ export default class LoomPlugin extends Plugin {
         this.state[file.path].nodes[newId] = {
           text: "",
           parentId: id,
+          unread: false,
+        };
+
+        this.save();
+        this.view.render();
+
+        this.app.workspace.trigger("loom:switch-to", newId);
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:clone", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const newId = uuidv4();
+        this.state[file.path].nodes[newId] = {
+          text: this.state[file.path].nodes[id].text,
+          parentId: this.state[file.path].nodes[id].parentId,
           unread: false,
         };
 
