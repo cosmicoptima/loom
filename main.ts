@@ -179,14 +179,6 @@ export default class LoomPlugin extends Plugin {
         });
         return this.view;
       },
-      // (id: string) => {
-      //   const file = this.app.workspace.getActiveFile();
-      //   if (file) {
-      //     this.state[file.path].current = id;
-      //     this.save();
-      //     this.view.render();
-      //   }
-      // }
     );
 
     try {
