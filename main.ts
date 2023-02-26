@@ -369,6 +369,7 @@ export default class LoomPlugin extends Plugin {
     const trailingSpace = prompt.match(/\s+$/);
     prompt = prompt.replace(/\s+$/, "");
 
+    try {
     let completions = (
       await this.openai.createCompletion({
         model,
@@ -378,6 +379,16 @@ export default class LoomPlugin extends Plugin {
         temperature: 1,
       })
     ).data.choices.map((choice) => choice.text);
+    } catch (e) {
+      if (e.response.status === 401)
+        new Notice("OpenAI API key is invalid. Please provide a valid key in the settings.");
+      else if (e.response.status === 429)
+        new Notice("OpenAI API rate limit exceeded.");
+      else
+        new Notice("Unknown OpenAI API error: " + e.response.data.error.message);
+
+      return;
+    }
 
     let ids = [];
     for (const completion of completions) {

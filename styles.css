@@ -32,6 +32,6 @@
 
 .loom-icon {
   display: inline-flex !important;
-  margin-left: 0.2em;
+  margin-left: 0.25em;
   --icon-size: 1rem;
 }
