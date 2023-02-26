@@ -572,7 +572,7 @@ class LoomView extends ItemView {
     this.containerEl.empty();
 
     const state = this.getNoteState();
-    const container = this.containerEl.createDiv({ cls: "outline" });
+    const container = this.containerEl.createDiv({ cls: "loom-outline outline" });
 
     if (!state) {
       container.createEl("div", { cls: "pane-empty", text: "No note selected." });

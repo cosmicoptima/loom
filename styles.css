@@ -1,3 +1,7 @@
+.loom-outline {
+  overflow-y: auto;
+}
+
 .loom-children {
   margin-left: 1em;
 }
