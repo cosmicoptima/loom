@@ -5,6 +5,7 @@
 .loom-node {
   display: flex;
   align-items: center;
+  padding: 0;
 }
 
 .loom-node.is-active {
@@ -15,6 +16,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0.4em 0.6em;
 }
 
 .loom-node-unread {
@@ -26,12 +28,12 @@
   height: 0.3em;
   border-radius: 50%;
   background-color: var(--nav-item-color);
-  margin-right: 0.5em;
+  margin-left: 0.5em;
   flex-shrink: 0;
 }
 
 .loom-icon {
   display: inline-flex !important;
-  margin-left: 0.25em;
-  --icon-size: 1rem;
+  margin-right: 0.25em;
+  --icon-size: 1.1rem;
 }
