@@ -29,14 +29,14 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
 interface Node {
   text: string;
-  parentId?: string;
+  parentId: string | null;
   unread: boolean;
   lastVisited?: number;
 }
 
 interface NoteState {
   current: string;
-  nodes: Node[];
+  nodes: Record<string, Node>;
 }
 
 export default class LoomPlugin extends Plugin {
@@ -63,8 +63,8 @@ export default class LoomPlugin extends Plugin {
       id: "loom-complete",
       name: "Complete",
       icon: "wand",
-      editorCallback: async (editor: Editor, view: MarkdownView) =>
-        this.complete(this.settings.model, this.settings.maxTokens, this.settings.n, editor),
+      callback: async () =>
+        this.complete(this.settings.model, this.settings.maxTokens, this.settings.n),
       hotkeys: [ { modifiers: ["Ctrl"], key: " " } ],
     });
 
@@ -74,6 +74,8 @@ export default class LoomPlugin extends Plugin {
       icon: "plus",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         this.app.workspace.trigger("loom:create-child", this.state[file.path].current);
       },
       hotkeys: [ { modifiers: ["Ctrl", "Shift"], key: " " } ],
@@ -85,6 +87,8 @@ export default class LoomPlugin extends Plugin {
       icon: "arrow-down",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         const state = this.state[file.path];
 
         this.app.workspace.trigger("loom:switch-to", this.nextSibling(state.current, state));
@@ -98,6 +102,8 @@ export default class LoomPlugin extends Plugin {
       icon: "arrow-up",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         const state = this.state[file.path];
 
         this.app.workspace.trigger("loom:switch-to", this.prevSibling(state.current, state));
@@ -111,6 +117,8 @@ export default class LoomPlugin extends Plugin {
       icon: "arrow-left",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         const state = this.state[file.path];
 
         const parentId = state.nodes[state.current].parentId;
@@ -125,11 +133,13 @@ export default class LoomPlugin extends Plugin {
       icon: "arrow-right",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         const state = this.state[file.path];
 
         const children = Object.entries(state.nodes)
-          .filter(([id, node]) => node.parentId === state.current)
-          .sort(([id1, node1], [id2, node2]) => node2.lastVisited - node1.lastVisited);
+          .filter(([, node]) => node.parentId === state.current)
+          .sort(([, node1], [, node2]) => (node2.lastVisited || 0) - (node1.lastVisited || 0)) // TODO check if this is correct
         if (children.length > 0) this.app.workspace.trigger("loom:switch-to", children[0][0]);
       },
       hotkeys: [ { modifiers: ["Alt"], key: "ArrowRight" } ],
@@ -141,6 +151,8 @@ export default class LoomPlugin extends Plugin {
       icon: "trash",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
         const state = this.state[file.path];
 
         this.app.workspace.trigger("loom:delete", state.current);
@@ -167,14 +179,14 @@ export default class LoomPlugin extends Plugin {
         });
         return this.view;
       },
-      (id) => {
-        const file = this.app.workspace.getActiveFile();
-        if (file) {
-          this.state[file.path].current = id;
-          this.save();
-          this.view.render();
-        }
-      }
+      // (id: string) => {
+      //   const file = this.app.workspace.getActiveFile();
+      //   if (file) {
+      //     this.state[file.path].current = id;
+      //     this.save();
+      //     this.view.render();
+      //   }
+      // }
     );
 
     try {
@@ -186,14 +198,17 @@ export default class LoomPlugin extends Plugin {
     } catch (e) { console.error(e); } finally { console.log("CELESTE WILL REMOVE THIS EVENTUALLY"); } // this wasn't working before?
 
     this.registerEvent(
-      this.app.workspace.on("editor-change", (editor: Editor, view: ItemView) => {
-        if (!this.state[view.file.path]) this.state[view.file.path] = { nodes: {} };
+      this.app.workspace.on("editor-change", (editor: Editor, view: MarkdownView) => {
+        if (!(view instanceof MarkdownView)) return;
+
+        // coerce to NoteState because `current` will be defined
+        if (!this.state[view.file.path]) this.state[view.file.path] = { nodes: {} } as NoteState;
 
         if (this.state[view.file.path].current) {
           const current = this.state[view.file.path].current;
 
           let ancestors = [];
-          let node = current;
+          let node: string | null = current;
           while (node) {
             node = this.state[view.file.path].nodes[node].parentId;
             if (node) ancestors.push(node);
@@ -258,6 +273,8 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      // ignore ts2769; the obsidian-api declarations don't account for custom events
+      // @ts-ignore
       this.app.workspace.on("loom:switch-to", (id: string) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
@@ -275,6 +292,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      // @ts-ignore
       this.app.workspace.on("loom:create-child", (id: string) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
@@ -294,6 +312,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      // @ts-ignore
       this.app.workspace.on("loom:delete", (id: string) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
@@ -329,6 +348,8 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
+        if (!file) return;
+
         this.view.render();
         this.app.workspace.iterateRootLeaves((leaf) => {
           if (leaf.view instanceof MarkdownView && leaf.view.file.path === file.path)
@@ -339,6 +360,8 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (!leaf) return;
+
         const view = leaf.view;
         if (view instanceof MarkdownView) this.editor = view.editor;
       })
@@ -353,13 +376,15 @@ export default class LoomPlugin extends Plugin {
     );
 
     const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) return;
+
     this.app.workspace.iterateRootLeaves((leaf) => {
       if (leaf.view instanceof MarkdownView && leaf.view.file.path === activeFile.path)
         this.editor = leaf.view.editor;
     });
   }
 
-  async complete(model: string, maxTokens: number, n: number, editor: Editor) {
+  async complete(model: string, maxTokens: number, n: number) {
     const file = this.app.workspace.getActiveFile();
     if (!file) return;
 
@@ -369,16 +394,17 @@ export default class LoomPlugin extends Plugin {
     const trailingSpace = prompt.match(/\s+$/);
     prompt = prompt.replace(/\s+$/, "");
 
+    let completions;
     try {
-    let completions = (
-      await this.openai.createCompletion({
-        model,
-        prompt,
-        max_tokens: maxTokens,
-        n,
-        temperature: 1,
-      })
-    ).data.choices.map((choice) => choice.text);
+      completions = (
+        await this.openai.createCompletion({
+          model,
+          prompt,
+          max_tokens: maxTokens,
+          n,
+          temperature: 1,
+        })
+      ).data.choices.map((choice) => choice.text);
     } catch (e) {
       if (e.response.status === 401)
         new Notice("OpenAI API key is invalid. Please provide a valid key in the settings.");
@@ -393,6 +419,7 @@ export default class LoomPlugin extends Plugin {
     let ids = [];
     for (const completion of completions) {
       let completion_ = completion;
+      if (!completion_) continue; // i've never seen this happen
 
       if (trailingSpace && completion_[0] === " ") completion_ = completion_.slice(1);
 
@@ -414,7 +441,7 @@ export default class LoomPlugin extends Plugin {
   fullText(id: string, state: NoteState) {
     let text = "";
 
-    let current = id;
+    let current: string | null = id;
     while (current) {
       text = state.nodes[current].text + text;
       current = state.nodes[current].parentId;
@@ -424,10 +451,10 @@ export default class LoomPlugin extends Plugin {
   }
 
   nextSibling(id: string, state: NoteState) {
-    const parentId = state.nodes[state.current].parentId;
+    const parentId = state.nodes[id].parentId;
     const siblings = Object.entries(state.nodes)
-      .filter(([id, node]) => node.parentId === parentId)
-      .map(([id, node]) => id);
+      .filter(([, node]) => node.parentId === parentId)
+      .map(([id, ]) => id);
 
     if (siblings.length === 1) return null;
 
@@ -436,10 +463,10 @@ export default class LoomPlugin extends Plugin {
   }
 
   prevSibling(id: string, state: NoteState) {
-    const parentId = state.nodes[state.current].parentId;
+    const parentId = state.nodes[id].parentId;
     const siblings = Object.entries(state.nodes)
-      .filter(([id, node]) => node.parentId === parentId)
-      .map(([id, node]) => id);
+      .filter(([, node]) => node.parentId === parentId)
+      .map(([id, ]) => id);
 
     if (siblings.length === 1) return null;
 
@@ -470,9 +497,9 @@ export default class LoomPlugin extends Plugin {
 }
 
 class LoomView extends ItemView {
-  getNoteState: () => NoteState;
+  getNoteState: () => NoteState | null;
 
-  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState) {
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null) {
     super(leaf);
 
     this.getNoteState = getNoteState;
@@ -492,14 +519,14 @@ class LoomView extends ItemView {
 
     const nodeEntries = Object.entries(state.nodes);
 
-    let onlyRootNode = null;
+    let onlyRootNode: string | null = null;
     const rootNodes = nodeEntries.filter(
       ([, node]) => node.parentId === null
     );
     if (rootNodes.length === 1) onlyRootNode = rootNodes[0][0];
 
     const renderChildren = (parentId: string | null, container: HTMLElement) => {
-      const children = nodeEntries.filter(([id, node]) => node.parentId === parentId);
+      const children = nodeEntries.filter(([, node]) => node.parentId === parentId);
       if (children.length === 0) return;
 
       for (const [id, node] of children) {
@@ -545,9 +572,9 @@ class LoomView extends ItemView {
 }
 
 class LoomSettingTab extends PluginSettingTab {
-  plugin: MyPlugin;
+  plugin: LoomPlugin;
 
-  constructor(app: App, plugin: MyPlugin) {
+  constructor(app: App, plugin: LoomPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
