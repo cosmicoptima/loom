@@ -28,7 +28,7 @@
   height: 0.3em;
   border-radius: 50%;
   background-color: var(--nav-item-color);
-  margin-left: 0.5em;
+  margin-left: 0.6em;
   flex-shrink: 0;
 }
 
