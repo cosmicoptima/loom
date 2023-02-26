@@ -10,4 +10,5 @@ default hotkeys:
 - `Alt+Backspace` - delete current node
 
 to install, clone this repository into a directory in `[vault]/.obsidian/plugins`.
+in the plugin directory, run `npm i` and `npm run build`.
 enable the plugin and set the openai api key in the `Loom` settings tab
