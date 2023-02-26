@@ -16,7 +16,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0.4em 0.6em;
+  padding: 0.35em 0 0.35em 0.6em;
 }
 
 .loom-node-unread {
@@ -34,6 +34,11 @@
 
 .loom-icon {
   display: inline-flex !important;
-  margin-right: 0.25em;
+  margin-left: 0.1em;
   --icon-size: 1.1rem;
+}
+
+.loom-icons {
+  display: inline-flex;
+  margin-right: 0.6em;
 }

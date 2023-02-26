@@ -541,12 +541,14 @@ class LoomView extends ItemView {
         const nodeText = nodeDiv.createEl(node.text ? "span" : "em", { cls: "loom-node-inner tree-item-inner", text: node.text || "No text" });
         nodeText.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
     
-        const createChildDiv = nodeDiv.createEl("div", { cls: "loom-icon" });
+        const iconsDiv = nodeDiv.createDiv({ cls: "loom-icons" });
+
+        const createChildDiv = iconsDiv.createEl("div", { cls: "loom-icon" });
         setIcon(createChildDiv, "plus");
         createChildDiv.addEventListener("click", () => this.app.workspace.trigger("loom:create-child", id));
 
         if (id !== onlyRootNode) {
-          const trashDiv = nodeDiv.createEl("div", { cls: "loom-icon" })
+          const trashDiv = iconsDiv.createEl("div", { cls: "loom-icon" })
           setIcon(trashDiv, "trash");
           trashDiv.addEventListener("click", () => this.app.workspace.trigger("loom:delete", id));
         }
