@@ -10,8 +10,11 @@ import {
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
+import GPT3Tokenizer from "gpt3-tokenizer";
 import { Configuration, OpenAIApi } from "openai";
 import { v4 as uuidv4 } from "uuid";
+
+const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
 interface LoomSettings {
   apiKey: string;
@@ -385,6 +388,12 @@ export default class LoomPlugin extends Plugin {
 
     const trailingSpace = prompt.match(/\s+$/);
     prompt = prompt.replace(/\s+$/, "");
+
+    const bpe = tokenizer.encode(prompt).bpe;
+    const tokens = bpe.slice(Math.max(0, bpe.length - (8000 - this.settings.maxTokens)), bpe.length);
+    prompt = tokenizer.decode(tokens);
+
+    console.log("prompt", prompt);
 
     let completions;
     try {
