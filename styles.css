@@ -39,6 +39,13 @@
 }
 
 .loom-icons {
-  display: inline-flex;
-  margin-right: 0.6em;
+  display: none;
+}
+
+.loom-node:hover .loom-icons {
+  display: inline-flex !important;
+}
+
+.loom-spacer {
+  padding-right: 0.6em;
 }

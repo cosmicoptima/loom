@@ -39,6 +39,8 @@ interface Node {
 
 interface NoteState {
   current: string;
+  // hoisted: string | null;
+  hoisted: string[];
   nodes: Record<string, Node>;
 }
 
@@ -190,14 +192,14 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.getRightLeaf(false).setViewState({
         type: "loom",
       });
-    } catch (e) { console.error(e); } finally { console.log("CELESTE WILL REMOVE THIS EVENTUALLY"); } // this wasn't working before?
+    } catch (e) { console.error(e); } // this wasn't working before?
 
     this.registerEvent(
       this.app.workspace.on("editor-change", (editor: Editor, view: MarkdownView) => {
         if (!(view instanceof MarkdownView)) return;
 
         // coerce to NoteState because `current` will be defined
-        if (!this.state[view.file.path]) this.state[view.file.path] = { nodes: {} } as NoteState;
+        if (!this.state[view.file.path]) this.state[view.file.path] = { hoisted: [] as string[], nodes: {} } as NoteState;
 
         if (this.state[view.file.path].current) {
           const current = this.state[view.file.path].current;
@@ -280,6 +282,32 @@ export default class LoomPlugin extends Plugin {
 
         const text = this.fullText(id, this.state[file.path]);
         this.editor.setValue(text);
+
+        this.save();
+        this.view.render();
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:hoist", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        this.state[file.path].hoisted.push(id);
+
+        this.save();
+        this.view.render();
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:unhoist", () => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        this.state[file.path].hoisted.pop();
 
         this.save();
         this.view.render();
@@ -392,8 +420,6 @@ export default class LoomPlugin extends Plugin {
     const bpe = tokenizer.encode(prompt).bpe;
     const tokens = bpe.slice(Math.max(0, bpe.length - (8000 - this.settings.maxTokens)), bpe.length);
     prompt = tokenizer.decode(tokens);
-
-    console.log("prompt", prompt);
 
     let completions;
     try {
@@ -526,39 +552,57 @@ class LoomView extends ItemView {
     );
     if (rootNodes.length === 1) onlyRootNode = rootNodes[0][0];
 
-    const renderChildren = (parentId: string | null, container: HTMLElement) => {
-      const children = nodeEntries.filter(([, node]) => node.parentId === parentId);
-      if (children.length === 0) return;
+    const renderNode = (node: Node, id: string, container: HTMLElement) => {
+      const childContainer = container.createDiv({});
 
-      for (const [id, node] of children) {
-        const childContainer = container.createDiv({});
+      const nodeDiv = childContainer.createDiv(
+        { cls: `is-clickable outgoing-link-item tree-item-self loom-node${node.unread ? " loom-node-unread" : ""}${id === state.current ? " is-active" : ""}` }
+      );
 
-        const nodeDiv = childContainer.createDiv(
-          { cls: `is-clickable outgoing-link-item tree-item-self loom-node${node.unread ? " loom-node-unread" : ""}${id === state.current ? " is-active" : ""}` }
-        );
-
-        if (node.unread) nodeDiv.createDiv({ cls: "loom-node-unread-indicator" });
-        const nodeText = nodeDiv.createEl(node.text ? "span" : "em", { cls: "loom-node-inner tree-item-inner", text: node.text || "No text" });
-        nodeText.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
+      if (node.unread) nodeDiv.createDiv({ cls: "loom-node-unread-indicator" });
+      const nodeText = nodeDiv.createEl(node.text ? "span" : "em", { cls: "loom-node-inner tree-item-inner", text: node.text || "No text" });
+      nodeText.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
     
-        const iconsDiv = nodeDiv.createDiv({ cls: "loom-icons" });
+      const iconsDiv = nodeDiv.createDiv({ cls: "loom-icons" });
+      nodeDiv.createDiv({ cls: "loom-spacer" });
 
-        const createChildDiv = iconsDiv.createEl("div", { cls: "loom-icon" });
-        setIcon(createChildDiv, "plus");
-        createChildDiv.addEventListener("click", () => this.app.workspace.trigger("loom:create-child", id));
-
-        if (id !== onlyRootNode) {
-          const trashDiv = iconsDiv.createEl("div", { cls: "loom-icon" })
-          setIcon(trashDiv, "trash");
-          trashDiv.addEventListener("click", () => this.app.workspace.trigger("loom:delete", id));
-        }
-
-        const childrenDiv = childContainer.createDiv({ cls: "loom-children" });
-        renderChildren(id, childrenDiv);
+      if (state.hoisted[state.hoisted.length - 1] === id) {
+        const unhoistDiv = iconsDiv.createEl("div", { cls: "loom-icon", title: "Unhoist" });
+        setIcon(unhoistDiv, "arrow-down");
+        unhoistDiv.addEventListener("click", () => this.app.workspace.trigger("loom:unhoist"));
+      } else {
+        const hoistDiv = iconsDiv.createEl("div", { cls: "loom-icon", title: "Hoist" });
+        setIcon(hoistDiv, "arrow-up");
+        hoistDiv.addEventListener("click", () => this.app.workspace.trigger("loom:hoist", id));
       }
+
+      const createChildDiv = iconsDiv.createEl("div", { cls: "loom-icon", title: "Create child" });
+      setIcon(createChildDiv, "plus");
+      createChildDiv.addEventListener("click", () => this.app.workspace.trigger("loom:create-child", id));
+
+      if (id !== onlyRootNode) {
+        const trashDiv = iconsDiv.createEl("div", { cls: "loom-icon", title: "Delete" });
+        setIcon(trashDiv, "trash");
+        trashDiv.addEventListener("click", () => this.app.workspace.trigger("loom:delete", id));
+      }
+
+      const childrenDiv = childContainer.createDiv({ cls: "loom-children" });
+      renderChildren(id, childrenDiv);
     };
 
-    renderChildren(null, container);
+    const renderChildren = (parentId: string | null, container: HTMLElement) => {
+      const children = nodeEntries.filter(([, node]) => node.parentId === parentId);
+      for (const [id, node] of children)
+        renderNode(node, id, container);
+    };
+
+    if (state.hoisted.length > 0)
+      renderNode(
+        state.nodes[state.hoisted[state.hoisted.length - 1]],
+        state.hoisted[state.hoisted.length - 1],
+        container
+      );
+    else renderChildren(null, container);
   }
 
   getViewType(): string {
