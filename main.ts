@@ -39,7 +39,6 @@ interface Node {
 
 interface NoteState {
   current: string;
-  // hoisted: string | null;
   hoisted: string[];
   nodes: Record<string, Node>;
 }
@@ -569,6 +568,8 @@ class LoomView extends ItemView {
   }
 
   render() {
+    const scroll = (this.containerEl.children[0] as HTMLElement).scrollTop;
+
     this.containerEl.empty();
 
     const state = this.getNoteState();
@@ -638,6 +639,8 @@ class LoomView extends ItemView {
         container
       );
     else renderChildren(null, container);
+
+    container.scrollTop = scroll;
   }
 
   getViewType(): string {
