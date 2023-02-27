@@ -1,4 +1,4 @@
-loom in obsidian
+[loom](https://github.com/socketteer/loom) in obsidian
 
 default hotkeys:
 - `Ctrl+Space` - complete  
