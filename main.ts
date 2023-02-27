@@ -451,9 +451,13 @@ export default class LoomPlugin extends Plugin {
     const trailingSpace = prompt.match(/\s+$/);
     prompt = prompt.replace(/\s+$/, "");
 
+    prompt = prompt.replace(/\\</g, "<");
+
     const bpe = tokenizer.encode(prompt).bpe;
     const tokens = bpe.slice(Math.max(0, bpe.length - (8000 - this.settings.maxTokens)), bpe.length);
     prompt = tokenizer.decode(tokens);
+
+    console.log("prompt", prompt);
 
     let completions;
     try {
@@ -479,7 +483,7 @@ export default class LoomPlugin extends Plugin {
 
     let ids = [];
     for (const completion of completions) {
-      let completion_ = completion;
+      let completion_ = completion?.replace(/</g, "\\<");
       if (!completion_) continue; // i've never seen this happen
 
       if (trailingSpace && completion_[0] === " ") completion_ = completion_.slice(1);
