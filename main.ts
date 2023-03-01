@@ -198,6 +198,27 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "loom-toggle-collapse-current-node",
+      name: "Toggle whether current node is collapsed",
+      icon: "folder",
+      callback: () => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const state = this.state[file.path];
+
+        this.app.workspace.trigger("loom:toggle-collapse", state.current);
+      },
+      hotkeys: [{ modifiers: ["Alt"], key: "Enter" }],
+    });
+
+    this.addCommand({
+      id: "loom-open-pane",
+      name: "Open Loom pane",
+      callback: () => this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" }),
+    });
+
+    this.addCommand({
       id: "loom-debug-reset-state",
       name: "Debug: Reset state",
       callback: async () => {
