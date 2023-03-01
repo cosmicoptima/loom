@@ -322,7 +322,7 @@ export default class LoomPlugin extends Plugin {
         if (!file) return;
 
         if (!this.state[file.path].nodes[id]) {
-          console.error("Tried to switch to nonexistent node:", id);
+          new Notice(`Tried to switch to nonexistent node: ${id} CELESTE TAKE NOTE`);
           return;
         }
 
@@ -453,7 +453,7 @@ export default class LoomPlugin extends Plugin {
         this.view.render();
 
         // TODO
-        if (deletedIds.includes(nextId)) console.error("deleted nextId");
+        if (deletedIds.includes(nextId)) new Notice("Deleted nextId; CELESTE TAKE NOTE");
 
         if (deletedIds.includes(this.state[file.path].current))
           this.app.workspace.trigger("loom:switch-to", nextId);
