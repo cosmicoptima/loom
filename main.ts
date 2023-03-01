@@ -462,6 +462,13 @@ export default class LoomPlugin extends Plugin {
       }),
     );
 
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        delete this.state[file.path];
+        this.save();
+      }),
+    );
+
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) return;
 
