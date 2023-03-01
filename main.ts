@@ -35,6 +35,7 @@ interface Node {
   parentId: string | null;
   unread: boolean;
   lastVisited?: number;
+  collapsed: boolean;
 }
 
 interface NoteState {
@@ -242,6 +243,7 @@ export default class LoomPlugin extends Plugin {
                 text: newText,
                 parentId: i === 0 ? null : ancestors[i - 1],
                 unread: false,
+                collapsed: false,
               };
 
               this.app.workspace.trigger("loom:switch-to", id);
@@ -259,6 +261,7 @@ export default class LoomPlugin extends Plugin {
               text: text.substring(ancestorTexts.join("").length),
               parentId: this.state[view.file.path].nodes[current].parentId,
               unread: false,
+              collapsed: false,
             };
 
             this.app.workspace.trigger("loom:switch-to", id);
@@ -274,6 +277,7 @@ export default class LoomPlugin extends Plugin {
             text: editor.getValue(),
             parentId: null,
             unread: false,
+            collapsed: false,
           };
         }
 
@@ -296,6 +300,19 @@ export default class LoomPlugin extends Plugin {
 
         const text = this.fullText(id, this.state[file.path]);
         this.editor.setValue(text);
+
+        this.save();
+        this.view.render();
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:toggle-collapse", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        this.state[file.path].nodes[id].collapsed = !this.state[file.path].nodes[id].collapsed;
 
         this.save();
         this.view.render();
@@ -339,6 +356,7 @@ export default class LoomPlugin extends Plugin {
           text: "",
           parentId: id,
           unread: false,
+          collapsed: false,
         };
 
         this.save();
@@ -359,6 +377,7 @@ export default class LoomPlugin extends Plugin {
           text: this.state[file.path].nodes[id].text,
           parentId: this.state[file.path].nodes[id].parentId,
           unread: false,
+          collapsed: false,
         };
 
         this.save();
@@ -493,6 +512,7 @@ export default class LoomPlugin extends Plugin {
         text: completion_,
         parentId: state.current,
         unread: true,
+        collapsed: false,
       };
       ids.push(id);
     }
@@ -599,6 +619,13 @@ class LoomView extends ItemView {
         { cls: `is-clickable outgoing-link-item tree-item-self loom-node${node.unread ? " loom-node-unread" : ""}${id === state.current ? " is-active" : ""}` }
       );
 
+      const hasChildren = nodeEntries.filter(([, node]) => node.parentId === id).length > 0;
+      if (hasChildren) {
+        const collapseDiv = nodeDiv.createDiv({ cls: `collapse-icon loom-collapse${node.collapsed ? " is-collapsed" : ""}` });
+        setIcon(collapseDiv, "right-triangle");
+        collapseDiv.addEventListener("click", () => this.app.workspace.trigger("loom:toggle-collapse", id));
+      }
+
       if (node.unread) nodeDiv.createDiv({ cls: "loom-node-unread-indicator" });
       const nodeText = nodeDiv.createEl(node.text ? "span" : "em", { cls: "loom-node-inner tree-item-inner", text: node.text || "No text" });
       nodeText.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
@@ -626,8 +653,10 @@ class LoomView extends ItemView {
         trashDiv.addEventListener("click", () => this.app.workspace.trigger("loom:delete", id));
       }
 
-      const childrenDiv = childContainer.createDiv({ cls: "loom-children" });
-      renderChildren(id, childrenDiv);
+      if (!node.collapsed) {
+        const childrenDiv = childContainer.createDiv({ cls: "loom-children" });
+        renderChildren(id, childrenDiv);
+      }
     };
 
     const renderChildren = (parentId: string | null, container: HTMLElement) => {

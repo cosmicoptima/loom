@@ -2,6 +2,14 @@
   overflow-y: auto;
 }
 
+.loom-collapse {
+  margin-left: 0.6em;
+}
+
+.loom-collapse.is-collapsed {
+  transform: rotate(-90deg);
+}
+
 .loom-children {
   margin-left: 1em;
 }
