@@ -1,5 +1,31 @@
-.loom-outline {
+.loom {
   overflow-y: auto;
+}
+
+.loom-buttons {
+  margin-top: 0.5em;
+}
+
+.loom-settings {
+  margin-bottom: 0.3em;
+}
+
+.hidden {
+  display: none;
+}
+
+.loom-setting {
+  display: flex;
+  flex-direction: column;
+}
+
+.loom-setting label {
+  font-size: 0.9em;
+  margin-bottom: 0.3em;
+}
+
+.loom-setting input {
+  margin-bottom: 0.6em;
 }
 
 .loom-collapse {

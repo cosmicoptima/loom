@@ -21,6 +21,7 @@ interface LoomSettings {
   model: string;
   maxTokens: number;
   n: number;
+  showSettings: boolean;
 }
 
 const DEFAULT_SETTINGS: LoomSettings = {
@@ -28,6 +29,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   model: "code-davinci-002",
   maxTokens: 64,
   n: 5,
+  showSettings: false,
 };
 
 interface Node {
@@ -232,7 +234,7 @@ export default class LoomPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (file) return this.state[file.path];
         return null;
-      });
+      }, () => this.settings);
       return this.view;
     });
 
@@ -482,6 +484,15 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
+        this.settings = { ...this.settings, [setting]: value };
+        this.save();
+        this.view.render();
+      })
+    );
+
+    this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
 
@@ -662,22 +673,81 @@ export default class LoomPlugin extends Plugin {
 
 class LoomView extends ItemView {
   getNoteState: () => NoteState | null;
+  getSettings: () => LoomSettings;
 
-  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null) {
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null, getSettings: () => LoomSettings) {
     super(leaf);
 
     this.getNoteState = getNoteState;
+    this.getSettings = getSettings;
     this.render();
   }
 
   render() {
-    const scroll = (this.containerEl.children[0] as HTMLElement).scrollTop;
+    const scroll = (this.containerEl as HTMLElement).scrollTop;
 
     this.containerEl.empty();
+    this.containerEl.addClass("loom");
+
+    const navButtonsContainer = this.containerEl.createDiv({
+      cls: "nav-buttons-container loom-buttons",
+    });
+    const settingsButton = navButtonsContainer.createDiv({
+      cls: `clickable-icon nav-action-button${this.getSettings().showSettings ? " is-active" : ""}`,
+      attr: { "aria-label": "Settings" },
+    });
+    setIcon(settingsButton, "settings");
+    settingsButton.addEventListener("click", () => {
+      this.app.workspace.trigger("loom:set-setting", "showSettings", !this.getSettings().showSettings);
+    });
 
     const state = this.getNoteState();
     const container = this.containerEl.createDiv({
-      cls: "loom-outline outline",
+      cls: "outline",
+    });
+
+    const settings = container.createDiv({ cls: `loom-settings${this.getSettings().showSettings ? "" : " hidden"}` });
+
+    const modelDiv = settings.createDiv({ cls: "loom-setting" });
+    modelDiv.createEl("label", { text: "Model" });
+    const modelInput = modelDiv.createEl("input", {
+      type: "text",
+      value: this.getSettings().model,
+    });
+    modelInput.addEventListener("input", (e) => {
+      this.app.workspace.trigger(
+        "loom:set-setting",
+        "model",
+        (e.target as HTMLInputElement).value,
+      );
+    });
+
+    const maxTokensDiv = settings.createDiv({ cls: "loom-setting" });
+    maxTokensDiv.createEl("label", { text: "Length (in tokens)" });
+    const maxTokensInput = maxTokensDiv.createEl("input", {
+      type: "number",
+      value: String(this.getSettings().maxTokens),
+    });
+    maxTokensInput.addEventListener("input", (e) => {
+      this.app.workspace.trigger(
+        "loom:set-setting",
+        "maxTokens",
+        parseInt((e.target as HTMLInputElement).value),
+      );
+    });
+
+    const nDiv = settings.createDiv({ cls: "loom-setting" });
+    nDiv.createEl("label", { text: "Number of completions" });
+    const nInput = nDiv.createEl("input", {
+      type: "number",
+      value: String(this.getSettings().n),
+    });
+    nInput.addEventListener("input", (e) => {
+      this.app.workspace.trigger(
+        "loom:set-setting",
+        "n",
+        parseInt((e.target as HTMLInputElement).value),
+      );
     });
 
     if (!state) {
@@ -732,7 +802,7 @@ class LoomView extends ItemView {
       if (state.hoisted[state.hoisted.length - 1] === id) {
         const unhoistDiv = iconsDiv.createEl("div", {
           cls: "loom-icon",
-          title: "Unhoist",
+          attr: { "aria-label": "Unhoist" },
         });
         setIcon(unhoistDiv, "arrow-down");
         unhoistDiv.addEventListener("click", () =>
@@ -741,7 +811,7 @@ class LoomView extends ItemView {
       } else {
         const hoistDiv = iconsDiv.createEl("div", {
           cls: "loom-icon",
-          title: "Hoist",
+          attr: { "aria-label": "Hoist" },
         });
         setIcon(hoistDiv, "arrow-up");
         hoistDiv.addEventListener("click", () =>
@@ -751,7 +821,7 @@ class LoomView extends ItemView {
 
       const createChildDiv = iconsDiv.createEl("div", {
         cls: "loom-icon",
-        title: "Create child",
+        attr: { "aria-label": "Create child" },
       });
       setIcon(createChildDiv, "plus");
       createChildDiv.addEventListener("click", () =>
@@ -761,7 +831,7 @@ class LoomView extends ItemView {
       if (id !== onlyRootNode) {
         const trashDiv = iconsDiv.createEl("div", {
           cls: "loom-icon",
-          title: "Delete",
+          attr: { "aria-label": "Delete" },
         });
         setIcon(trashDiv, "trash");
         trashDiv.addEventListener("click", () =>
@@ -793,7 +863,7 @@ class LoomView extends ItemView {
       );
     else renderChildren(null, container);
 
-    container.scrollTop = scroll;
+    this.containerEl.scrollTop = scroll;
   }
 
   getViewType(): string {
