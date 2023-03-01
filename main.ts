@@ -21,6 +21,7 @@ interface LoomSettings {
   model: string;
   maxTokens: number;
   n: number;
+  temperature: number;
   showSettings: boolean;
 }
 
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   model: "code-davinci-002",
   maxTokens: 64,
   n: 5,
+  temperature: 1,
   showSettings: false,
 };
 
@@ -736,6 +738,20 @@ class LoomView extends ItemView {
       );
     });
 
+    const temperatureDiv = settings.createDiv({ cls: "loom-setting" });
+    temperatureDiv.createEl("label", { text: "Temperature" });
+    const temperatureInput = temperatureDiv.createEl("input", {
+      type: "number",
+      value: String(this.getSettings().temperature),
+    });
+    temperatureInput.addEventListener("input", (e) => {
+      this.app.workspace.trigger(
+        "loom:set-setting",
+        "temperature",
+        parseFloat((e.target as HTMLInputElement).value),
+      );
+    });
+
     const nDiv = settings.createDiv({ cls: "loom-setting" });
     nDiv.createEl("label", { text: "Number of completions" });
     const nInput = nDiv.createEl("input", {
@@ -923,6 +939,15 @@ class LoomSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.n.toString())
         .onChange(async (value) => {
           this.plugin.settings.n = parseInt(value);
+          await this.plugin.save();
+        })
+    );
+
+    new Setting(containerEl).setName("Temperature").addText((text) =>
+      text
+        .setValue(this.plugin.settings.temperature.toString())
+        .onChange(async (value) => {
+          this.plugin.settings.temperature = parseFloat(value);
           await this.plugin.save();
         })
     );
