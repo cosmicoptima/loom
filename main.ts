@@ -294,6 +294,11 @@ export default class LoomPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
 
+        if (!this.state[file.path].nodes[id]) {
+          console.error("Tried to switch to nonexistent node:", id);
+          return;
+        }
+
         this.state[file.path].current = id;
         this.state[file.path].nodes[id].unread = false;
         this.state[file.path].nodes[id].lastVisited = Date.now();
@@ -393,6 +398,12 @@ export default class LoomPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
 
+        if (this.state[file.path].hoisted.includes(id))
+          this.state[file.path].hoisted =
+            this.state[file.path].hoisted.filter(
+              (hoistedId) => hoistedId !== id
+            );
+
         let nextId = this.nextSibling(id, this.state[file.path]);
         if (!nextId) nextId = this.state[file.path].nodes[id].parentId;
         if (!nextId) return;
@@ -475,8 +486,6 @@ export default class LoomPlugin extends Plugin {
     const bpe = tokenizer.encode(prompt).bpe;
     const tokens = bpe.slice(Math.max(0, bpe.length - (8000 - this.settings.maxTokens)), bpe.length);
     prompt = tokenizer.decode(tokens);
-
-    console.log("prompt", prompt);
 
     let completions;
     try {
