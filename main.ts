@@ -19,10 +19,12 @@ const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
 interface LoomSettings {
   apiKey: string;
+
   model: string;
   maxTokens: number;
-  n: number;
   temperature: number;
+  n: number;
+
   showSettings: boolean;
   cloneParentOnEdit: boolean;
 }
@@ -30,7 +32,7 @@ interface LoomSettings {
 const DEFAULT_SETTINGS: LoomSettings = {
   apiKey: "",
   model: "code-davinci-002",
-  maxTokens: 64,
+  maxTokens: 30,
   n: 5,
   temperature: 1,
   showSettings: false,
@@ -60,6 +62,12 @@ export default class LoomPlugin extends Plugin {
 
   openai: OpenAIApi;
 
+  withFile<T>(callback: (file: TFile) => T): T | null {
+    const file = this.app.workspace.getActiveFile();
+    if (!file) return null;
+    return callback(file);
+  }
+
   async onload() {
     await this.loadSettings();
     await this.loadState();
@@ -75,46 +83,51 @@ export default class LoomPlugin extends Plugin {
       id: "loom-complete",
       name: "Complete",
       icon: "wand",
-      callback: async () =>
-        this.complete(
-          this.settings.model,
-          this.settings.maxTokens,
-          this.settings.n
-        ),
+      callback: async () => this.complete(),
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
     });
+
+    const withState = (callback: (state: NoteState) => void) => {
+      return this.withFile((file) => {
+        const state = this.state[file.path];
+        if (!state) this.initializeFile(file);
+
+        callback(state);
+      });
+    };
 
     this.addCommand({
       id: "loom-create-child",
       name: "Create child of current node",
       icon: "plus",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
+      callback: () => withState((state) => this.app.workspace.trigger("loom:create-child", state.current)),
+      hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "n" }],
+    });
 
-        this.app.workspace.trigger(
-          "loom:create-child",
-          this.state[file.path].current
-        );
-      },
-      hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: " " }],
+    this.addCommand({
+      id: "loom-create-sibling",
+      name: "Create sibling of current node",
+      icon: "list-plus",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:create-sibling", state.current)),
+      hotkeys: [{ modifiers: ["Alt"], key: "n" }],
+    });
+
+    this.addCommand({
+      id: "loom-clone-current-node",
+      name: "Clone current node",
+      icon: "copy",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:clone", state.current)),
+      hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
     this.addCommand({
       id: "loom-switch-to-next-sibling",
       name: "Switch to next sibling",
       icon: "arrow-down",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        this.app.workspace.trigger(
-          "loom:switch-to",
-          this.nextSibling(state.current, state)
-        );
-      },
+      callback: () => withState((state) => {
+        const nextSibling = this.nextSibling(state.current, state);
+        if (nextSibling) this.app.workspace.trigger("loom:switch-to", nextSibling);
+      }),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowDown" }],
     });
 
@@ -122,17 +135,10 @@ export default class LoomPlugin extends Plugin {
       id: "loom-switch-to-previous-sibling",
       name: "Switch to previous sibling",
       icon: "arrow-up",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        this.app.workspace.trigger(
-          "loom:switch-to",
-          this.prevSibling(state.current, state)
-        );
-      },
+      callback: () => withState((state) => {
+        const prevSibling = this.prevSibling(state.current, state);
+        if (prevSibling) this.app.workspace.trigger("loom:switch-to", prevSibling);
+      }),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowUp" }],
     });
 
@@ -140,15 +146,10 @@ export default class LoomPlugin extends Plugin {
       id: "loom-switch-to-parent",
       name: "Switch to parent",
       icon: "arrow-left",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
+      callback: () => withState((state) => {
         const parentId = state.nodes[state.current].parentId;
         if (parentId) this.app.workspace.trigger("loom:switch-to", parentId);
-      },
+      }),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowLeft" }],
     });
 
@@ -156,21 +157,10 @@ export default class LoomPlugin extends Plugin {
       id: "loom-switch-to-child",
       name: "Switch to child",
       icon: "arrow-right",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        const children = Object.entries(state.nodes)
-          .filter(([, node]) => node.parentId === state.current)
-          .sort(
-            ([, node1], [, node2]) =>
-              (node2.lastVisited || 0) - (node1.lastVisited || 0)
-          ); // TODO check if this is correct
-        if (children.length > 0)
-          this.app.workspace.trigger("loom:switch-to", children[0][0]);
-      },
+      callback: () => withState((state) => {
+        const lastVisitedChild = this.lastVisitedChild(state);
+        if (lastVisitedChild) this.app.workspace.trigger("loom:switch-to", lastVisitedChild);
+      }),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowRight" }],
     });
 
@@ -178,45 +168,16 @@ export default class LoomPlugin extends Plugin {
       id: "loom-delete-current-node",
       name: "Delete current node",
       icon: "trash",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        this.app.workspace.trigger("loom:delete", state.current);
-      },
+      callback: () => withState((state) => this.app.workspace.trigger("loom:delete", state.current)),
       hotkeys: [{ modifiers: ["Alt"], key: "Backspace" }],
-    });
-
-    this.addCommand({
-      id: "loom-clone-current-node",
-      name: "Clone current node",
-      icon: "copy",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        this.app.workspace.trigger("loom:clone", state.current);
-      },
-      hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
     this.addCommand({
       id: "loom-toggle-collapse-current-node",
       name: "Toggle whether current node is collapsed",
-      icon: "folder",
-      callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        const state = this.state[file.path];
-
-        this.app.workspace.trigger("loom:toggle-collapse", state.current);
-      },
-      hotkeys: [{ modifiers: ["Alt"], key: "Enter" }],
+      icon: "folder-up",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:toggle-collapse", state.current)),
+      hotkeys: [{ modifiers: ["Alt"], key: "e" }],
     });
 
     this.addCommand({
@@ -231,15 +192,12 @@ export default class LoomPlugin extends Plugin {
       callback: async () => {
         this.state = {};
         await this.save();
+        this.view.render();
       },
     });
 
     this.registerView("loom", (leaf) => {
-      this.view = new LoomView(leaf, () => {
-        const file = this.app.workspace.getActiveFile();
-        if (file) return this.state[file.path];
-        return null;
-      }, () => this.settings);
+      this.view = new LoomView(leaf, () => this.withFile((file) => this.state[file.path]), () => this.settings);
       return this.view;
     });
 
@@ -251,7 +209,11 @@ export default class LoomPlugin extends Plugin {
         });
     } catch (e) {
       console.error(e);
-    } // this wasn't working before?
+    }
+    // TODO
+    // `Cannot read properties of null (reading 'children')`
+    //
+    // this doesn't seem to cause any problems if wrapped in a try/catch
 
     this.registerEvent(
       this.app.workspace.on(
@@ -445,6 +407,27 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-ignore
+      this.app.workspace.on("loom:create-sibling", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const newId = uuidv4();
+        this.state[file.path].nodes[newId] = {
+          text: "",
+          parentId: this.state[file.path].nodes[id].parentId,
+          unread: false,
+          collapsed: false,
+        };
+
+        this.save();
+        this.view.render();
+
+        this.app.workspace.trigger("loom:switch-to", newId);
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
       this.app.workspace.on("loom:clone", (id: string) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return;
@@ -496,11 +479,13 @@ export default class LoomPlugin extends Plugin {
         this.save();
         this.view.render();
 
-        // TODO
-        if (deletedIds.includes(nextId)) new Notice("Deleted nextId; CELESTE TAKE NOTE");
-
-        if (deletedIds.includes(this.state[file.path].current))
+        if (deletedIds.includes(this.state[file.path].current)) {
+          if (deletedIds.includes(nextId)) {
+            new Notice("Deleted current node and fallback; CELESTE TAKE NOTE");
+            return;
+          } // TODO
           this.app.workspace.trigger("loom:switch-to", nextId);
+        }
       })
     );
 
@@ -590,7 +575,7 @@ export default class LoomPlugin extends Plugin {
     this.view.render();
   }
 
-  async complete(model: string, maxTokens: number, n: number) {
+  async complete() {
     const file = this.app.workspace.getActiveFile();
     if (!file) return;
 
@@ -613,10 +598,10 @@ export default class LoomPlugin extends Plugin {
     try {
       completions = (
         await this.openai.createCompletion({
-          model,
+          model: this.settings.model,
           prompt,
-          max_tokens: maxTokens,
-          n,
+          max_tokens: this.settings.maxTokens,
+          n: this.settings.n,
           temperature: 1,
         })
       ).data.choices.map((choice) => choice.text);
@@ -679,7 +664,7 @@ export default class LoomPlugin extends Plugin {
 
     if (siblings.length === 1) return null;
 
-    const nextIndex = (siblings.indexOf(state.current) + 1) % siblings.length;
+    const nextIndex = (siblings.indexOf(id) + 1) % siblings.length;
     return siblings[nextIndex];
   }
 
@@ -692,8 +677,20 @@ export default class LoomPlugin extends Plugin {
     if (siblings.length === 1) return null;
 
     const prevIndex =
-      (siblings.indexOf(state.current) + siblings.length - 1) % siblings.length;
+      (siblings.indexOf(id) + siblings.length - 1) % siblings.length;
     return siblings[prevIndex];
+  }
+
+  lastVisitedChild(state: NoteState) {
+    const children = Object.entries(state.nodes)
+      .filter(([, node]) => node.parentId === state.current)
+      .sort(
+        ([, node1], [, node2]) =>
+          (node2.lastVisited || 0) - (node1.lastVisited || 0)
+      );
+
+    if (children.length === 0) return null;
+    return children[0][0];
   }
 
   async loadSettings() {
@@ -894,6 +891,15 @@ class LoomView extends ItemView {
         );
       }
 
+      const createSiblingDiv = iconsDiv.createEl("div", {
+        cls: "loom-icon",
+        attr: { "aria-label": "Create sibling" },
+      });
+      setIcon(createSiblingDiv, "list-plus");
+      createSiblingDiv.addEventListener("click", () =>
+        this.app.workspace.trigger("loom:create-sibling", id)
+      );
+
       const createChildDiv = iconsDiv.createEl("div", {
         cls: "loom-icon",
         attr: { "aria-label": "Create child" },
@@ -1005,20 +1011,20 @@ class LoomSettingTab extends PluginSettingTab {
         })
     );
 
-    new Setting(containerEl).setName("Number of completions").addText((text) =>
-      text
-        .setValue(this.plugin.settings.n.toString())
-        .onChange(async (value) => {
-          this.plugin.settings.n = parseInt(value);
-          await this.plugin.save();
-        })
-    );
-
     new Setting(containerEl).setName("Temperature").addText((text) =>
       text
         .setValue(this.plugin.settings.temperature.toString())
         .onChange(async (value) => {
           this.plugin.settings.temperature = parseFloat(value);
+          await this.plugin.save();
+        })
+    );
+
+    new Setting(containerEl).setName("Number of completions").addText((text) =>
+      text
+        .setValue(this.plugin.settings.n.toString())
+        .onChange(async (value) => {
+          this.plugin.settings.n = parseInt(value);
           await this.plugin.save();
         })
     );
