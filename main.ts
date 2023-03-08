@@ -488,6 +488,7 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       // @ts-ignore
       this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
+        console.log("setting", setting, "to", value);
         this.settings = { ...this.settings, [setting]: value };
         this.save();
         this.view.render();
@@ -715,8 +716,9 @@ class LoomView extends ItemView {
     const modelInput = modelDiv.createEl("input", {
       type: "text",
       value: this.getSettings().model,
+      attr: { id: "loom-model" },
     });
-    modelInput.addEventListener("input", (e) => {
+    modelInput.addEventListener("blur", (e) => {
       this.app.workspace.trigger(
         "loom:set-setting",
         "model",
@@ -729,8 +731,9 @@ class LoomView extends ItemView {
     const maxTokensInput = maxTokensDiv.createEl("input", {
       type: "number",
       value: String(this.getSettings().maxTokens),
+      attr: { id: "loom-max-tokens" },
     });
-    maxTokensInput.addEventListener("input", (e) => {
+    maxTokensInput.addEventListener("blur", (e) => {
       this.app.workspace.trigger(
         "loom:set-setting",
         "maxTokens",
@@ -743,8 +746,9 @@ class LoomView extends ItemView {
     const temperatureInput = temperatureDiv.createEl("input", {
       type: "number",
       value: String(this.getSettings().temperature),
+      attr: { id: "loom-temperature" },
     });
-    temperatureInput.addEventListener("input", (e) => {
+    temperatureInput.addEventListener("blur", (e) => {
       this.app.workspace.trigger(
         "loom:set-setting",
         "temperature",
@@ -757,8 +761,9 @@ class LoomView extends ItemView {
     const nInput = nDiv.createEl("input", {
       type: "number",
       value: String(this.getSettings().n),
+      attr: { id: "loom-n" },
     });
-    nInput.addEventListener("input", (e) => {
+    nInput.addEventListener("blur", (e) => {
       this.app.workspace.trigger(
         "loom:set-setting",
         "n",
