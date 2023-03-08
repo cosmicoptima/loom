@@ -24,6 +24,7 @@ interface LoomSettings {
   n: number;
   temperature: number;
   showSettings: boolean;
+  cloneParentOnEdit: boolean;
 }
 
 const DEFAULT_SETTINGS: LoomSettings = {
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   n: 5,
   temperature: 1,
   showSettings: false,
+  cloneParentOnEdit: true,
 };
 
 interface Node {
@@ -284,18 +286,34 @@ export default class LoomPlugin extends Plugin {
               const textBefore = ancestorTexts.slice(0, i + 1).join("");
 
               if (!text.startsWith(textBefore)) {
-                const newPrefix = ancestorTexts.slice(0, i).join("");
-                const newText = text.substring(newPrefix.length);
+                if (this.settings.cloneParentOnEdit) {
+                  const newPrefix = ancestorTexts.slice(0, i).join("");
+                  const newText = text.substring(newPrefix.length);
 
-                const id = uuidv4();
-                this.state[view.file.path].nodes[id] = {
-                  text: newText,
-                  parentId: i === 0 ? null : ancestors[i - 1],
-                  unread: false,
-                  collapsed: false,
-                };
+                  const id = uuidv4();
+                  this.state[view.file.path].nodes[id] = {
+                    text: newText,
+                    parentId: i === 0 ? null : ancestors[i - 1],
+                    unread: false,
+                    collapsed: false,
+                  };
 
-                this.app.workspace.trigger("loom:switch-to", id);
+                  this.app.workspace.trigger("loom:switch-to", id);
+                } else {
+                  const allTexts = [...ancestorTexts, this.state[view.file.path].nodes[current].text];
+                  
+                  const prefix = allTexts.slice(0, i).join("");
+                  const suffix = allTexts.slice(i + 1).join("");
+
+                  let newText = text.substring(prefix.length);
+                  newText = newText.substring(0, newText.length - suffix.length);
+
+                  this.state[view.file.path].nodes[ancestors[i]].text = newText;
+
+                  this.save();
+                  this.view.render();
+                }
+                  
                 return;
               }
             }
@@ -489,7 +507,6 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       // @ts-ignore
       this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
-        console.log("setting", setting, "to", value);
         this.settings = { ...this.settings, [setting]: value };
         this.save();
         this.view.render();
@@ -722,6 +739,7 @@ class LoomView extends ItemView {
     const navButtonsContainer = this.containerEl.createDiv({
       cls: "nav-buttons-container loom-buttons",
     });
+
     const settingsButton = navButtonsContainer.createDiv({
       cls: `clickable-icon nav-action-button${this.getSettings().showSettings ? " is-active" : ""}`,
       attr: { "aria-label": "Settings" },
@@ -729,6 +747,15 @@ class LoomView extends ItemView {
     setIcon(settingsButton, "settings");
     settingsButton.addEventListener("click", () => {
       this.app.workspace.trigger("loom:set-setting", "showSettings", !this.getSettings().showSettings);
+    });
+
+    const cpoeButton = navButtonsContainer.createDiv({
+      cls: `clickable-icon nav-action-button${this.getSettings().cloneParentOnEdit ? " is-active" : ""}`,
+      attr: { "aria-label": "Don't allow nodes with children to be edited; clone them instead" },
+    });
+    setIcon(cpoeButton, "copy");
+    cpoeButton.addEventListener("click", () => {
+      this.app.workspace.trigger("loom:set-setting", "cloneParentOnEdit", !this.getSettings().cloneParentOnEdit);
     });
 
     const state = this.getNoteState();
