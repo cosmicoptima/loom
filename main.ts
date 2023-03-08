@@ -913,6 +913,18 @@ class LoomSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
+    const disclaimerHeader = containerEl.createEl("p");
+
+    disclaimerHeader.createEl("strong", { text: "To those new to Obsidian:" });
+    disclaimerHeader.createEl("span", { text: " the Loom UI is not open by default. You can open it via one of the following methods:" });
+
+    const methods = containerEl.createEl("ul");
+    methods.createEl("li", { text: "Open the right sidebar and click the Loom icon." });
+    const method2 = methods.createEl("li");
+    method2.createEl("span", { text: "Open the command palette, then search for and run the " });
+    method2.createEl("kbd", { text: "Loom: Open Loom pane" });
+    method2.createEl("span", { text: " command." });
+
     new Setting(containerEl)
       .setName("OpenAI API key")
       .setDesc("Required")
