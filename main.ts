@@ -7,6 +7,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  TFile,
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
@@ -507,6 +508,10 @@ export default class LoomPlugin extends Plugin {
           )
             this.editor = leaf.view.editor;
         });
+
+        if (!this.state[file.path]) {
+          this.initializeFile(file);
+        }
       })
     );
 
@@ -544,6 +549,28 @@ export default class LoomPlugin extends Plugin {
       )
         this.editor = leaf.view.editor;
     });
+  }
+
+  initializeFile(file: TFile) {
+    // coerce to NoteState because `current` will be defined
+    this.state[file.path] = {
+      hoisted: [] as string[],
+      nodes: {},
+    } as NoteState;
+
+    const text = this.editor.getValue();
+
+    const id = uuidv4();
+    this.state[file.path].nodes[id] = {
+      text,
+      parentId: null,
+      unread: false,
+      collapsed: false,
+    };
+    this.state[file.path].current = id;
+
+    this.save();
+    this.view.render();
   }
 
   async complete(model: string, maxTokens: number, n: number) {
