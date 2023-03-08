@@ -21,4 +21,5 @@ is not open by default. to open it, you can either:
 2. open the right sidebar -- there is a toggle in the top right of the screen -- and switch to
 the loom tab*
 
-*the tab looks like this:
+*the tab looks like this:  
+![network](https://github.com/cosmicoptima/loom/raw/master/assets/loom_tab.png)
