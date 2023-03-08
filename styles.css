@@ -76,7 +76,7 @@
   --icon-size: 1.1rem;
 }
 
-.loom-icons {
+.loom-icons:not(.is-mobile) {
   display: none;
 }
 
