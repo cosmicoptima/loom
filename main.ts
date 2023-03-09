@@ -174,13 +174,13 @@ export default class LoomPlugin extends Plugin {
 
     this.addCommand({
       id: "loom-clear-children",
-      name: "Clear current node's children",
+      name: "Delete current node's children",
       callback: () => withState((state) => this.app.workspace.trigger("loom:clear-children", state.current)),
     });
 
     this.addCommand({
       id: "loom-clear-siblings",
-      name: "Clear current node's siblings",
+      name: "Delete current node's siblings",
       callback: () => withState((state) => this.app.workspace.trigger("loom:clear-siblings", state.current)),
     });
 
