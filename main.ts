@@ -173,6 +173,18 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "loom-clear-children",
+      name: "Clear current node's children",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:clear-children", state.current)),
+    });
+
+    this.addCommand({
+      id: "loom-clear-siblings",
+      name: "Clear current node's siblings",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:clear-siblings", state.current)),
+    });
+
+    this.addCommand({
       id: "loom-toggle-collapse-current-node",
       name: "Toggle whether current node is collapsed",
       icon: "folder-up",
@@ -486,6 +498,39 @@ export default class LoomPlugin extends Plugin {
           } // TODO
           this.app.workspace.trigger("loom:switch-to", nextId);
         }
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:clear-children", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const children = Object.entries(this.state[file.path].nodes).filter(
+          ([, node]) => node.parentId === id
+        );
+        for (const [id, ] of children) this.app.workspace.trigger("loom:delete", id);
+
+        this.save();
+        this.view.render();
+      })
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:clear-siblings", (id: string) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return;
+
+        const parentId = this.state[file.path].nodes[id].parentId;
+        const siblings = Object.entries(this.state[file.path].nodes).filter(
+          ([id_, node]) => node.parentId === parentId && id_ !== id
+        );
+        for (const [id, ] of siblings) this.app.workspace.trigger("loom:delete", id);
+
+        this.save();
+        this.view.render();
       })
     );
 
