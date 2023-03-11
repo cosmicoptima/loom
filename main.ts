@@ -68,6 +68,19 @@ export default class LoomPlugin extends Plugin {
     return callback(file);
   }
 
+  thenSaveAndRender(callback: () => void) {
+    callback();
+
+    this.save();
+    this.view.render();
+  }
+
+  wftsar(callback: (file: TFile) => void) {
+    this.thenSaveAndRender(() => {
+      this.withFile(callback);
+    });
+  }
+
   async onload() {
     await this.loadSettings();
     await this.loadState();
@@ -117,6 +130,13 @@ export default class LoomPlugin extends Plugin {
       name: "Clone current node",
       icon: "copy",
       callback: () => withState((state) => this.app.workspace.trigger("loom:clone", state.current)),
+      hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "c" }],
+    });
+
+    this.addCommand({
+      id: "loom-break-at-point",
+      name: "Split current node into: parent node before cursor, child node after cursor, and new child node",
+      callback: () => withState((state) => this.app.workspace.trigger("loom:break-at-point", state.current)),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
@@ -201,11 +221,7 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "loom-debug-reset-state",
       name: "Debug: Reset state",
-      callback: async () => {
-        this.state = {};
-        await this.save();
-        this.view.render();
-      },
+      callback: () => this.thenSaveAndRender(() => this.state = {}),
     });
 
     this.registerView("loom", (leaf) => {
@@ -214,11 +230,8 @@ export default class LoomPlugin extends Plugin {
     });
 
     try {
-      const loomExists = this.app.workspace.getLeavesOfType("loom").length > 0;
-      if (!loomExists)
-        this.app.workspace.getRightLeaf(false).setViewState({
-          type: "loom",
-        });
+      if (!(this.app.workspace.getLeavesOfType("loom").length > 0))
+        this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
     } catch (e) {
       console.error(e);
     }
@@ -230,91 +243,17 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on(
         "editor-change",
-        (editor: Editor, view: MarkdownView) => {
-          if (!(view instanceof MarkdownView)) return;
-
-          // coerce to NoteState because `current` will be defined
+        (editor: Editor, view: MarkdownView) => this.thenSaveAndRender(() => {
+          // if this note has no state, initialize it
           if (!this.state[view.file.path])
             this.state[view.file.path] = {
+              current: null as any, // `current` will be defined later
               hoisted: [] as string[],
               nodes: {},
-            } as NoteState;
+            };
 
-          if (this.state[view.file.path].current) {
-            const current = this.state[view.file.path].current;
-
-            let ancestors = [];
-            let node: string | null = current;
-            while (node) {
-              node = this.state[view.file.path].nodes[node].parentId;
-              if (node) ancestors.push(node);
-            }
-            ancestors = ancestors.reverse();
-
-            const text = editor.getValue();
-            const ancestorTexts = ancestors.map(
-              (id) => this.state[view.file.path].nodes[id].text
-            );
-
-            for (let i = 0; i < ancestors.length; i++) {
-              const textBefore = ancestorTexts.slice(0, i + 1).join("");
-
-              if (!text.startsWith(textBefore)) {
-                if (this.settings.cloneParentOnEdit) {
-                  const newPrefix = ancestorTexts.slice(0, i).join("");
-                  const newText = text.substring(newPrefix.length);
-
-                  const id = uuidv4();
-                  this.state[view.file.path].nodes[id] = {
-                    text: newText,
-                    parentId: i === 0 ? null : ancestors[i - 1],
-                    unread: false,
-                    collapsed: false,
-                  };
-
-                  this.app.workspace.trigger("loom:switch-to", id);
-                } else {
-                  const allTexts = [...ancestorTexts, this.state[view.file.path].nodes[current].text];
-                  
-                  const prefix = allTexts.slice(0, i).join("");
-                  const suffix = allTexts.slice(i + 1).join("");
-
-                  let newText = text.substring(prefix.length);
-                  newText = newText.substring(0, newText.length - suffix.length);
-
-                  this.state[view.file.path].nodes[ancestors[i]].text = newText;
-
-                  this.save();
-                  this.view.render();
-                }
-                  
-                return;
-              }
-            }
-
-            const previousText =
-              ancestorTexts.join("") +
-              this.state[view.file.path].nodes[current].text;
-            const children = Object.values(
-              this.state[view.file.path].nodes
-            ).filter((node) => node.parentId === current);
-            if (children.length > 0 && text !== previousText) {
-              const id = uuidv4();
-              this.state[view.file.path].nodes[id] = {
-                text: text.substring(ancestorTexts.join("").length),
-                parentId: this.state[view.file.path].nodes[current].parentId,
-                unread: false,
-                collapsed: false,
-              };
-
-              this.app.workspace.trigger("loom:switch-to", id);
-              return;
-            }
-
-            this.state[view.file.path].nodes[current].text = text.slice(
-              ancestorTexts.join("").length
-            );
-          } else {
+          // if this note has no current node, set it to the editor's text and return
+          if (!this.state[view.file.path].current) {
             const current = uuidv4();
             this.state[view.file.path].current = current;
             this.state[view.file.path].nodes[current] = {
@@ -323,85 +262,127 @@ export default class LoomPlugin extends Plugin {
               unread: false,
               collapsed: false,
             };
+
+            return;
           }
 
-          this.save();
+          const current = this.state[view.file.path].current;
 
-          this.view.render();
-        }
+          // `ancestors`: starts with the root node, ends with the parent of the current node
+          let ancestors: string[] = [];
+          let node: string | null = current;
+          while (node) {
+            node = this.state[view.file.path].nodes[node].parentId;
+            if (node) ancestors.push(node);
+          }
+          ancestors = ancestors.reverse();
+
+          // `ancestorTexts`: the text of each node in `ancestors`
+          const text = editor.getValue();
+          const ancestorTexts = ancestors.map(
+            (id) => this.state[view.file.path].nodes[id].text
+          );
+
+          // `familyTexts`: `ancestorTexts` + the current node's text
+          const familyTexts = ancestorTexts.concat(
+            this.state[view.file.path].nodes[current].text
+          );
+
+          // for each ancestor, check if the editor's text starts with the ancestor's full text
+          // if not, check if cpoe is enabled
+          //   if so, `cloneParent`
+          //   if not, `editNode`
+
+          // `cloneParent`: create a sibling of the ancestor's parent with the new text
+          const cloneParent = (i: number) => {
+            const newPrefix = ancestorTexts.slice(0, i).join("");
+            const newText = text.substring(newPrefix.length);
+
+            const id = uuidv4();
+            this.state[view.file.path].nodes[id] = {
+              text: newText,
+              parentId: i === 0 ? null : ancestors[i - 1],
+              unread: false,
+              collapsed: false,
+            };
+
+            this.app.workspace.trigger("loom:switch-to", id);
+          };
+
+          // `editNode`: edit the ancestor's text to match the in-range section of the editor's text
+          const editNode = (i: number) => {
+            const prefix = familyTexts.slice(0, i).join("");
+            const suffix = familyTexts.slice(i + 1).join("");
+
+            let newText = text.substring(prefix.length);
+            newText = newText.substring(0, newText.length - suffix.length);
+
+            this.state[view.file.path].nodes[ancestors[i]].text = newText;
+          };
+
+          for (let i = 0; i < ancestors.length; i++) {
+            const textBefore = ancestorTexts.slice(0, i + 1).join("");
+
+            if (!text.startsWith(textBefore)) {
+              if (this.settings.cloneParentOnEdit) cloneParent(i);
+              else editNode(i);
+                
+              return;
+            }
+          }
+
+          // if the edited node has children and cpoe is enabled, `cloneParent`
+          const children = Object.values(
+            this.state[view.file.path].nodes
+          ).filter((node) => node.parentId === current);
+          const fullText = familyTexts.join(""); // don't clone parent if the text is the same
+          if (children.length > 0 && text !== fullText && this.settings.cloneParentOnEdit)
+            cloneParent(ancestors.length);
+
+          this.state[view.file.path].nodes[current].text = text.slice(
+            ancestorTexts.join("").length
+          );
+        })
       )
     );
 
     this.registerEvent(
       // ignore ts2769; the obsidian-api declarations don't account for custom events
       // @ts-ignore
-      this.app.workspace.on("loom:switch-to", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        if (!this.state[file.path].nodes[id]) {
-          new Notice(`Tried to switch to nonexistent node: ${id} CELESTE TAKE NOTE`);
-          return;
-        }
-
+      this.app.workspace.on("loom:switch-to", (id: string) => this.wftsar((file) => {
         this.state[file.path].current = id;
         this.state[file.path].nodes[id].unread = false;
         this.state[file.path].nodes[id].lastVisited = Date.now();
 
-        const text = this.fullText(id, this.state[file.path]);
-        this.editor.setValue(text);
-
-        this.save();
-        this.view.render();
-      })
+        this.editor.setValue(this.fullText(id, this.state[file.path]));
+      }))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:toggle-collapse", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
+      this.app.workspace.on("loom:toggle-collapse", (id: string) => this.wftsar((file) =>
         this.state[file.path].nodes[id].collapsed =
-          !this.state[file.path].nodes[id].collapsed;
-
-        this.save();
-        this.view.render();
-      })
+          !this.state[file.path].nodes[id].collapsed
+      ))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:hoist", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        this.state[file.path].hoisted.push(id);
-
-        this.save();
-        this.view.render();
-      })
+      this.app.workspace.on("loom:hoist", (id: string) => this.wftsar((file) =>
+        this.state[file.path].hoisted.push(id)
+      ))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:unhoist", () => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
-        this.state[file.path].hoisted.pop();
-
-        this.save();
-        this.view.render();
-      })
+      this.app.workspace.on("loom:unhoist", () => this.wftsar((file) =>
+        this.state[file.path].hoisted.pop()
+      ))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:create-child", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
+      this.app.workspace.on("loom:create-child", (id: string) => this.withFile((file) => {
         const newId = uuidv4();
         this.state[file.path].nodes[newId] = {
           text: "",
@@ -410,19 +391,13 @@ export default class LoomPlugin extends Plugin {
           collapsed: false,
         };
 
-        this.save();
-        this.view.render();
-
         this.app.workspace.trigger("loom:switch-to", newId);
-      })
+      }))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:create-sibling", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
+      this.app.workspace.on("loom:create-sibling", (id: string) => this.withFile((file) => {
         const newId = uuidv4();
         this.state[file.path].nodes[newId] = {
           text: "",
@@ -431,19 +406,13 @@ export default class LoomPlugin extends Plugin {
           collapsed: false,
         };
 
-        this.save();
-        this.view.render();
-
         this.app.workspace.trigger("loom:switch-to", newId);
-      })
+      }))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:clone", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
-
+      this.app.workspace.on("loom:clone", (id: string) => this.withFile((file) => {
         const newId = uuidv4();
         this.state[file.path].nodes[newId] = {
           text: this.state[file.path].nodes[id].text,
@@ -452,19 +421,82 @@ export default class LoomPlugin extends Plugin {
           collapsed: false,
         };
 
-        this.save();
-        this.view.render();
-
         this.app.workspace.trigger("loom:switch-to", newId);
-      })
+      }))
     );
 
     this.registerEvent(
       // @ts-ignore
-      this.app.workspace.on("loom:delete", (id: string) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return;
+      this.app.workspace.on("loom:break-at-point", () => this.withFile((file) => {
+        // split the current node into:
+        //   - parent node with text before cursor
+        //   - child node with text after cursor
+        //   - new child node with no text
 
+        const current = this.state[file.path].current;
+        const cursor = this.editor.getCursor();
+
+        // first, get the cursor's position in the full text
+        let cursorPos = 0;
+        for (let i = 0; i < cursor.line; i++)
+          cursorPos += this.editor.getLine(i).length + 1;
+        cursorPos += cursor.ch;
+
+        const family = this.family(current, this.state[file.path]);
+        const familyTexts = family.map((id) => this.state[file.path].nodes[id].text);
+
+        // find the node that the cursor is in
+        let i = cursorPos;
+        let n = 0;
+        while (i > 0) {
+          i -= familyTexts[n].length;
+          n++;
+        }
+        const inRangeNode = family[n - 1];
+        const inRangeNodeText = familyTexts[n - 1];
+        const currentCursorPos = -i;
+
+        // then, get the text before and after the cursor
+        const before = inRangeNodeText.substring(0, currentCursorPos);
+        const after = inRangeNodeText.substring(currentCursorPos);
+
+        // then, set the in-range node's text to the text before the cursor
+        this.state[file.path].nodes[inRangeNode].text = before;
+
+        // get the in-range node's children, which will be moved later
+        const children = Object.values(
+          this.state[file.path].nodes
+        ).filter((node) => node.parentId === inRangeNode);
+
+        // then, create a new node with the text after the cursor
+        const afterId = uuidv4();
+        this.state[file.path].nodes[afterId] = {
+          text: after,
+          parentId: inRangeNode,
+          unread: false,
+          collapsed: false,
+        };
+
+        // then, create a new node with no text
+        const newId = uuidv4();
+        this.state[file.path].nodes[newId] = {
+          text: "",
+          parentId: inRangeNode,
+          unread: false,
+          collapsed: false,
+        };
+
+        // move the children to under the after node
+        children.forEach((child) => child.parentId = afterId);
+
+        // switch to the new node
+        this.app.workspace.trigger("loom:switch-to", newId);
+      }))
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:delete", (id: string) => this.wftsar((file) => {
         if (this.state[file.path].hoisted.includes(id))
           this.state[file.path].hoisted = this.state[file.path].hoisted.filter(
             (hoistedId) => hoistedId !== id
@@ -488,17 +520,14 @@ export default class LoomPlugin extends Plugin {
         delete this.state[file.path].nodes[id];
         deleteChildren(id);
 
-        this.save();
-        this.view.render();
-
         if (deletedIds.includes(this.state[file.path].current)) {
           if (deletedIds.includes(nextId)) {
-            new Notice("Deleted current node and fallback; CELESTE TAKE NOTE");
+            new Notice("WARNING: deleted current node and fallback");
             return;
           } // TODO
           this.app.workspace.trigger("loom:switch-to", nextId);
         }
-      })
+      }))
     );
 
     this.registerEvent(
@@ -699,6 +728,19 @@ export default class LoomPlugin extends Plugin {
     }
 
     return text;
+  }
+
+  family(id: string, state: NoteState) {
+    let ids = [id];
+
+    let current: string | null = id;
+    while (current) {
+      current = state.nodes[current].parentId;
+      if (current) ids.push(current);
+    }
+    ids = ids.reverse();
+
+    return ids;
   }
 
   nextSibling(id: string, state: NoteState) {

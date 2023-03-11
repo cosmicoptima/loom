@@ -3,9 +3,10 @@
 default hotkeys:
 - `Ctrl+Space` - complete  
 - `Ctrl+Alt+n` - create child  
-- `Alt+n` - create sibling
-- `Alt+c` - clone current node
-- `Alt+Backspace` - delete current node
+- `Alt+n` - create sibling  
+- `Alt+c` - split in-range node at caret (<- this is poorly explained but useful! try it!)  
+- `Ctrl+Alt+c` - clone current node  
+- `Alt+Backspace` - delete current node  
 - `Alt+Down` - switch to next sibling  
 - `Alt+Up` - switch to previous sibling  
 - `Alt+Left` - switch to parent  
