@@ -405,6 +405,9 @@ export default class LoomPlugin extends Plugin {
           this.state[file.path].nodes[id].unread = false;
           this.state[file.path].nodes[id].lastVisited = Date.now();
 
+          const ancestors = this.family(id, this.state[file.path]).slice(0, -1);
+          ancestors.forEach((id) => this.state[file.path].nodes[id].collapsed = false);
+
           this.editor.setValue(this.fullText(id, this.state[file.path]));
         })
       )
