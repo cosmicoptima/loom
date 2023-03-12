@@ -32,7 +32,7 @@ interface LoomSettings {
 const DEFAULT_SETTINGS: LoomSettings = {
   apiKey: "",
   model: "code-davinci-002",
-  maxTokens: 30,
+  maxTokens: 60,
   n: 5,
   temperature: 1,
   showSettings: false,
