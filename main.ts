@@ -997,6 +997,7 @@ class LoomView extends ItemView {
         cls: `is-clickable outgoing-link-item tree-item-self loom-node${
           node.unread ? " loom-node-unread" : ""
         }${id === state.current ? " is-active" : ""}`,
+        attr: { "id": `loom-node-${id}` },
       });
 
       // an expand/collapse button if the node has children
@@ -1065,6 +1066,7 @@ class LoomView extends ItemView {
           this.app.workspace.trigger("loom:delete", id)
         );
 
+      // render children if the node is not collapsed
       if (!node.collapsed) {
         const childrenDiv = nodeDiv.createDiv({ cls: "loom-children" });
         renderChildren(id, childrenDiv);
@@ -1091,6 +1093,14 @@ class LoomView extends ItemView {
 
     // restore scroll position
     this.containerEl.scrollTop = scroll;
+    
+    // scroll to current node if it is not visible
+    const current = document.getElementById(`loom-node-${state.current}`);
+    if (current) {
+      const rect = current.getBoundingClientRect();
+      if (rect.top < 25 || rect.bottom > this.containerEl.clientHeight)
+        current.scrollIntoView();
+    }
   }
 
   getViewType(): string {
