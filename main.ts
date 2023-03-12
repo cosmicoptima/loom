@@ -279,7 +279,10 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on(
         "editor-change",
-        (editor: Editor, view: MarkdownView) =>
+        (editor: Editor, view: MarkdownView) => {
+          // get cursor position, so it can be restored later
+          const cursor = editor.getCursor();
+
           this.thenSaveAndRender(() => {
             // if this note has no state, initialize it
             if (!this.state[view.file.path])
@@ -385,7 +388,11 @@ export default class LoomPlugin extends Plugin {
             this.state[view.file.path].nodes[current].text = text.slice(
               ancestorTexts.join("").length
             );
-          })
+          });
+
+          // restore cursor position
+          editor.setCursor(cursor);
+        }
       )
     );
 
