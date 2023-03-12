@@ -658,6 +658,10 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      this.app.workspace.on("resize", () => this.view.render())
+    );
+
+    this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
         this.state[file.path] = this.state[oldPath];
         delete this.state[oldPath];
@@ -1068,8 +1072,23 @@ class LoomView extends ItemView {
 
       // render children if the node is not collapsed
       if (!node.collapsed) {
-        const childrenDiv = nodeDiv.createDiv({ cls: "loom-children" });
-        renderChildren(id, childrenDiv);
+        // if the node is too narrow, render a hoist button instead
+        const hasChildren = nodes.filter(([, node]) => node.parentId === id).length > 0;
+        if (nodeDiv.offsetWidth < 150 && hasChildren) {
+          const hoistButton = nodeDiv.createDiv({ cls: "loom-hoist-button" });
+          setIcon(hoistButton, "arrow-up");
+          hoistButton.createEl("span", {
+            text: "Show more...",
+            cls: "loom-hoist-button-text",
+          });
+
+          hoistButton.addEventListener("click", () =>
+            this.app.workspace.trigger("loom:hoist", id)
+          );
+        } else {
+          const childrenDiv = nodeDiv.createDiv({ cls: "loom-children" });
+          renderChildren(id, childrenDiv);
+        }
       }
     };
 

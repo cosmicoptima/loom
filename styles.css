@@ -36,6 +36,25 @@
   transform: rotate(-90deg);
 }
 
+.loom-hoist-button {
+  color: var(--text-faint);
+  font-size: 0.9em;
+  margin: 0.35em 0 0.35em 1.6em;
+  white-space: nowrap;
+
+  display: flex;
+  align-items: center;
+  width: max-content;
+}
+
+.loom-hoist-button:hover {
+  color: var(--text-normal);
+}
+
+.loom-hoist-button-text {
+  margin-left: 0.2em;
+}
+
 .loom-children {
   margin-left: 1em;
 }
