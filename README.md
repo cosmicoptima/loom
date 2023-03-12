@@ -1,5 +1,8 @@
 [loom](https://github.com/socketteer/loom) in obsidian
 
+i currently **recommend reading through this readme**, as the plugin might otherwise be confusing
+or inexplicably broken under some conditions, especially if you are new to loom or to obsidian
+
 default hotkeys:
 - `Ctrl+Space` - complete  
 - `Ctrl+Alt+n` - create child  
@@ -25,9 +28,11 @@ buttons shown when hovering over a node in the loom pane:
 - create child  
 - delete  
 
-to install, clone this repository into a directory in `[vault]/.obsidian/plugins`.
+to install\*, clone this repository into a directory in `[vault]/.obsidian/plugins`.
 in the plugin directory, run `npm i` and `npm run build`. you will need node.js 14 or higher.
 enable the plugin and set the openai api key in the `Loom` settings tab
+
+\*i haven't tested this on windows
 
 **for those new to obsidian:** the loom ui, containing a tree of the selected note's nodes,
 is not open by default. to open it, you can either:
