@@ -32,3 +32,10 @@ the loom tab*
 
 *the tab looks like this:  
 ![network](https://github.com/cosmicoptima/loom/raw/master/assets/loom_tab.png)
+
+**for those on macos:** a few default hotkeys -- `Alt+n`, `Alt+c`, and `Alt+e` -- are bound to
+special characters. at some point i will try to think of hotkeys that don't conflict with anything,
+but for now you can either:
+
+1. disable macos's special character shortcuts, as explained here: https://superuser.com/questions/941286/disable-default-option-key-binding
+2. rebind the loom hotkeys you want to use in the "Hotkeys" tab in settings
