@@ -377,8 +377,10 @@ export default class LoomPlugin extends Plugin {
               children.length > 0 &&
               text !== fullText &&
               this.settings.cloneParentOnEdit
-            )
+            ) {
               cloneParent(ancestors.length);
+              return;
+            }
 
             this.state[view.file.path].nodes[current].text = text.slice(
               ancestorTexts.join("").length
