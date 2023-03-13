@@ -1111,7 +1111,7 @@ class LoomView extends ItemView {
         button.addEventListener("click", callback);
       };
 
-      itemButton("Show menu", "menu", () => {
+      const showMenu = () => {
         const menu = new Menu();
 
         menu.addItem((item) => {
@@ -1165,7 +1165,13 @@ class LoomView extends ItemView {
 
         const rect = itemDiv.getBoundingClientRect();
         menu.showAtPosition({ x: rect.right, y: rect.top });
+      }
+
+      itemDiv.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showMenu();
       });
+      itemButton("Menu", "menu", showMenu);
 
       if (state.hoisted[state.hoisted.length - 1] === id)
         itemButton("Unhoist", "arrow-down", () =>
