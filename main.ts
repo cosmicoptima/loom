@@ -572,19 +572,39 @@ export default class LoomPlugin extends Plugin {
           );
 
           // find the node that the cursor is in
+          let end = false;
           let i = cursorPos;
           let n = 0;
-          while (i > 0) {
+          while (true) {
+            if (i < familyTexts[n].length) break;
+            if (n === family.length - 1) {
+              end = true;
+              break;
+            }
             i -= familyTexts[n].length;
             n++;
           }
-          const inRangeNode = family[n - 1];
-          const inRangeNodeText = familyTexts[n - 1];
-          const currentCursorPos = -i;
+
+          // if cursor is at the beginning of the node, create a sibling
+          if (i === 0) {
+            this.app.workspace.trigger("loom:create-sibling", family[0]);
+            return;
+          // if cursor is at the end of the node, create a child
+          } else if (end) {
+            this.app.workspace.trigger("loom:create-child", current);
+            return;
+          }
+
+          const inRangeNode = family[n];
+          const inRangeNodeText = familyTexts[n];
+          const currentCursorPos = i;
 
           // then, get the text before and after the cursor
           const before = inRangeNodeText.substring(0, currentCursorPos);
           const after = inRangeNodeText.substring(currentCursorPos);
+
+          console.log("before", before);
+          console.log("after", after);
 
           // then, set the in-range node's text to the text before the cursor
           this.state[file.path].nodes[inRangeNode].text = before;
