@@ -620,9 +620,6 @@ export default class LoomPlugin extends Plugin {
           const before = inRangeNodeText.substring(0, currentCursorPos);
           const after = inRangeNodeText.substring(currentCursorPos);
 
-          console.log("before", before);
-          console.log("after", after);
-
           // then, set the in-range node's text to the text before the cursor
           this.state[file.path].nodes[inRangeNode].text = before;
 
