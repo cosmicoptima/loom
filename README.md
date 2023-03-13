@@ -24,9 +24,10 @@ the following commands don't have hotkeys by default:
 
 buttons shown when hovering over a node in the loom pane:
 - hoist (only show this node and its children)  
-- create sibling  
-- create child  
 - delete  
+- in menu:
+  - create child  
+  - create sibling  
 
 to install, clone this repository into a directory in `[vault]/.obsidian/plugins`.
 in the plugin directory, run `npm i` and `npm run build`. you will need node.js 14 or higher.

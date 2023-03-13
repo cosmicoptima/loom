@@ -3,6 +3,7 @@ import {
   Editor,
   ItemView,
   MarkdownView,
+  Menu,
   Notice,
   Plugin,
   PluginSettingTab,
@@ -1110,6 +1111,24 @@ class LoomView extends ItemView {
         button.addEventListener("click", callback);
       };
 
+      itemButton("Show menu", "menu", () => {
+        const menu = new Menu();
+
+        menu.addItem((item) => {
+          item.setTitle("Create child");
+          item.setIcon("plus");
+          item.onClick(() => this.app.workspace.trigger("loom:create-child", id));
+        });
+        menu.addItem((item) => {
+          item.setTitle("Create sibling");
+          item.setIcon("list-plus");
+          item.onClick(() => this.app.workspace.trigger("loom:create-sibling", id));
+        });
+
+        const rect = itemDiv.getBoundingClientRect();
+        menu.showAtPosition({ x: rect.right, y: rect.top });
+      });
+
       if (state.hoisted[state.hoisted.length - 1] === id)
         itemButton("Unhoist", "arrow-down", () =>
           this.app.workspace.trigger("loom:unhoist")
@@ -1119,12 +1138,12 @@ class LoomView extends ItemView {
           this.app.workspace.trigger("loom:hoist", id)
         );
 
-      itemButton("Create sibling", "list-plus", () =>
-        this.app.workspace.trigger("loom:create-sibling", id)
-      );
-      itemButton("Create child", "plus", () =>
-        this.app.workspace.trigger("loom:create-child", id)
-      );
+      // itemButton("Create sibling", "list-plus", () =>
+      //   this.app.workspace.trigger("loom:create-sibling", id)
+      // );
+      // itemButton("Create child", "plus", () =>
+      //   this.app.workspace.trigger("loom:create-child", id)
+      // );
 
       if (id !== onlyRootNode)
         itemButton("Delete", "trash", () =>
