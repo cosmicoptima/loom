@@ -124,6 +124,11 @@
   padding: 0.35em;
 }
 
+.loom-section-header-inner {
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
 .loom-section-count {
   color: var(--text-faint);
 }

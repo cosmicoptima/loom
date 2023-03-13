@@ -1267,14 +1267,14 @@ class LoomView extends ItemView {
     const bookmarksDiv = container.createDiv({ cls: "loom-section" });
     const bookmarks = nodes.filter(([, node]) => node.bookmarked);
     const bookmarkHeader = bookmarksDiv.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
-    bookmarkHeader.createEl("b", { text: "Bookmarks", cls: "tree-item-inner" });
+    bookmarkHeader.createEl("span", { text: "Bookmarks", cls: "tree-item-inner loom-section-header-inner" });
     bookmarkHeader.createEl("span", { text: `${bookmarks.length}`, cls: "tree-item-flair-outer loom-section-count" });
     for (const [id, node] of bookmarks) renderNode(node, id, bookmarksDiv, false);
 
     // main tree header
     const treeHeader = container.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
     const treeHeaderText = state.hoisted.length > 0 ? "Hoisted node" : "All nodes";
-    treeHeader.createEl("b", { text: treeHeaderText, cls: "tree-item-inner" });
+    treeHeader.createEl("span", { text: treeHeaderText, cls: "tree-item-inner loom-section-header-inner" });
 
     // if there is a hoisted node, it is the root node
     // otherwise, all children of `null` are the root nodes
