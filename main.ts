@@ -495,7 +495,8 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("loom:toggle-bookmark", (id: string) =>
         this.wftsar(
           (file) =>
-            (this.state[file.path].nodes[id].bookmarked = !this.state[file.path].nodes[id].bookmarked)
+            (this.state[file.path].nodes[id].bookmarked =
+              !this.state[file.path].nodes[id].bookmarked)
         )
       )
     );
@@ -605,7 +606,7 @@ export default class LoomPlugin extends Plugin {
           if (i === 0) {
             this.app.workspace.trigger("loom:create-sibling", family[0]);
             return;
-          // if cursor is at the end of the node, create a child
+            // if cursor is at the end of the node, create a child
           } else if (end) {
             this.app.workspace.trigger("loom:create-child", current);
             return;
@@ -1115,7 +1116,12 @@ class LoomView extends ItemView {
     const rootNodes = nodes.filter(([, node]) => node.parentId === null);
     if (rootNodes.length === 1) onlyRootNode = rootNodes[0][0];
 
-    const renderNode = (node: Node, id: string, container: HTMLElement, children: boolean) => {
+    const renderNode = (
+      node: Node,
+      id: string,
+      container: HTMLElement,
+      children: boolean
+    ) => {
       // div for the node and its children
       const nodeDiv = container.createDiv({});
 
@@ -1123,7 +1129,9 @@ class LoomView extends ItemView {
       const itemDiv = nodeDiv.createDiv({
         cls: `is-clickable outgoing-link-item tree-item-self loom-node${
           node.unread ? " loom-node-unread" : ""
-        }${id === state.current ? " is-active" : ""}${node.color ? ` loom-node-${node.color}` : ""}`,
+        }${id === state.current ? " is-active" : ""}${
+          node.color ? ` loom-node-${node.color}` : ""
+        }`,
         attr: { id: `loom-node-${id}` },
       });
 
@@ -1186,8 +1194,7 @@ class LoomView extends ItemView {
             item.setTitle("Unhoist");
             item.setIcon("arrow-down");
             item.onClick(() => this.app.workspace.trigger("loom:unhoist"));
-          }
-          else {
+          } else {
             item.setTitle("Hoist");
             item.setIcon("arrow-up");
             item.onClick(() => this.app.workspace.trigger("loom:hoist", id));
@@ -1201,7 +1208,9 @@ class LoomView extends ItemView {
             item.setTitle("Bookmark");
             item.setIcon("bookmark");
           }
-          item.onClick(() => this.app.workspace.trigger("loom:toggle-bookmark", id));
+          item.onClick(() =>
+            this.app.workspace.trigger("loom:toggle-bookmark", id)
+          );
         });
         menu.addItem((item) => {
           item.setTitle("Set color to...");
@@ -1222,7 +1231,9 @@ class LoomView extends ItemView {
               colorMenu.addItem((item) => {
                 item.setTitle(title);
                 item.setIcon(icon);
-                item.onClick(() => this.app.workspace.trigger("loom:set-color", id, color));
+                item.onClick(() =>
+                  this.app.workspace.trigger("loom:set-color", id, color)
+                );
               });
             }
 
@@ -1236,12 +1247,16 @@ class LoomView extends ItemView {
         menu.addItem((item) => {
           item.setTitle("Create child");
           item.setIcon("plus");
-          item.onClick(() => this.app.workspace.trigger("loom:create-child", id));
+          item.onClick(() =>
+            this.app.workspace.trigger("loom:create-child", id)
+          );
         });
         menu.addItem((item) => {
           item.setTitle("Create sibling");
           item.setIcon("list-plus");
-          item.onClick(() => this.app.workspace.trigger("loom:create-sibling", id));
+          item.onClick(() =>
+            this.app.workspace.trigger("loom:create-sibling", id)
+          );
         });
 
         menu.addSeparator();
@@ -1249,12 +1264,16 @@ class LoomView extends ItemView {
         menu.addItem((item) => {
           item.setTitle("Delete all children");
           item.setIcon("x");
-          item.onClick(() => this.app.workspace.trigger("loom:clear-children", id));
+          item.onClick(() =>
+            this.app.workspace.trigger("loom:clear-children", id)
+          );
         });
         menu.addItem((item) => {
           item.setTitle("Delete all siblings");
           item.setIcon("list-x");
-          item.onClick(() => this.app.workspace.trigger("loom:clear-siblings", id));
+          item.onClick(() =>
+            this.app.workspace.trigger("loom:clear-siblings", id)
+          );
         });
 
         if (id !== onlyRootNode) {
@@ -1269,7 +1288,7 @@ class LoomView extends ItemView {
 
         const rect = itemDiv.getBoundingClientRect();
         menu.showAtPosition({ x: rect.right, y: rect.top });
-      }
+      };
 
       itemDiv.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -1333,15 +1352,30 @@ class LoomView extends ItemView {
     // bookmark list
     const bookmarksDiv = container.createDiv({ cls: "loom-section" });
     const bookmarks = nodes.filter(([, node]) => node.bookmarked);
-    const bookmarkHeader = bookmarksDiv.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
-    bookmarkHeader.createEl("span", { text: "Bookmarks", cls: "tree-item-inner loom-section-header-inner" });
-    bookmarkHeader.createEl("span", { text: `${bookmarks.length}`, cls: "tree-item-flair-outer loom-section-count" });
-    for (const [id, node] of bookmarks) renderNode(node, id, bookmarksDiv, false);
+    const bookmarkHeader = bookmarksDiv.createDiv({
+      cls: "tree-item-self loom-node loom-section-header",
+    });
+    bookmarkHeader.createEl("span", {
+      text: "Bookmarks",
+      cls: "tree-item-inner loom-section-header-inner",
+    });
+    bookmarkHeader.createEl("span", {
+      text: `${bookmarks.length}`,
+      cls: "tree-item-flair-outer loom-section-count",
+    });
+    for (const [id, node] of bookmarks)
+      renderNode(node, id, bookmarksDiv, false);
 
     // main tree header
-    const treeHeader = container.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
-    const treeHeaderText = state.hoisted.length > 0 ? "Hoisted node" : "All nodes";
-    treeHeader.createEl("span", { text: treeHeaderText, cls: "tree-item-inner loom-section-header-inner" });
+    const treeHeader = container.createDiv({
+      cls: "tree-item-self loom-node loom-section-header",
+    });
+    const treeHeaderText =
+      state.hoisted.length > 0 ? "Hoisted node" : "All nodes";
+    treeHeader.createEl("span", {
+      text: treeHeaderText,
+      cls: "tree-item-inner loom-section-header-inner",
+    });
 
     // if there is a hoisted node, it is the root node
     // otherwise, all children of `null` are the root nodes
