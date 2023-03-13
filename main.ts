@@ -59,6 +59,7 @@ export default class LoomPlugin extends Plugin {
 
   editor: Editor;
   view: LoomView;
+  statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
 
@@ -95,6 +96,10 @@ export default class LoomPlugin extends Plugin {
     this.addSettingTab(new LoomSettingTab(this.app, this));
 
     this.setOpenAI();
+
+    this.statusBarItem = this.addStatusBarItem();
+    this.statusBarItem.setText("Completing...");
+    this.statusBarItem.style.display = "none";
 
     this.addCommand({
       id: "loom-complete",
@@ -752,6 +757,8 @@ export default class LoomPlugin extends Plugin {
     if (!file) return;
     // TODO add async support to withFile and wftsar, so `complete` can be wrapped
 
+    this.statusBarItem.style.display = "inline-flex";
+
     const state = this.state[file.path];
     let prompt = this.fullText(state.current, state);
 
@@ -795,6 +802,7 @@ export default class LoomPlugin extends Plugin {
           "Unknown OpenAI API error: " + e.response.data.error.message
         );
 
+      this.statusBarItem.style.display = "none";
       return;
     }
 
@@ -823,6 +831,8 @@ export default class LoomPlugin extends Plugin {
 
     this.save();
     this.view.render();
+
+    this.statusBarItem.style.display = "none";
   }
 
   fullText(id: string, state: NoteState) {
