@@ -46,6 +46,7 @@ interface Node {
   unread: boolean;
   lastVisited?: number;
   collapsed: boolean;
+  bookmarked: boolean;
 }
 
 interface NoteState {
@@ -311,6 +312,7 @@ export default class LoomPlugin extends Plugin {
                 parentId: null,
                 unread: false,
                 collapsed: false,
+                bookmarked: false,
               };
 
               return;
@@ -372,6 +374,7 @@ export default class LoomPlugin extends Plugin {
                 parentId: i === 0 ? null : ancestors[i - 1],
                 unread: false,
                 collapsed: false,
+                bookmarked: false,
               };
 
               let parentId = id;
@@ -382,6 +385,7 @@ export default class LoomPlugin extends Plugin {
                   parentId,
                   unread: false,
                   collapsed: false,
+                  bookmarked: false,
                 };
                 parentId = childId;
               }
@@ -482,6 +486,16 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-ignore
+      this.app.workspace.on("loom:toggle-bookmark", (id: string) =>
+        this.wftsar(
+          (file) =>
+            (this.state[file.path].nodes[id].bookmarked = !this.state[file.path].nodes[id].bookmarked)
+        )
+      )
+    );
+
+    this.registerEvent(
+      // @ts-ignore
       this.app.workspace.on("loom:create-child", (id: string) =>
         this.withFile((file) => {
           const newId = uuidv4();
@@ -490,6 +504,7 @@ export default class LoomPlugin extends Plugin {
             parentId: id,
             unread: false,
             collapsed: false,
+            bookmarked: false,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -507,6 +522,7 @@ export default class LoomPlugin extends Plugin {
             parentId: this.state[file.path].nodes[id].parentId,
             unread: false,
             collapsed: false,
+            bookmarked: false,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -524,6 +540,7 @@ export default class LoomPlugin extends Plugin {
             parentId: this.state[file.path].nodes[id].parentId,
             unread: false,
             collapsed: false,
+            bookmarked: false,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -584,6 +601,7 @@ export default class LoomPlugin extends Plugin {
             parentId: inRangeNode,
             unread: false,
             collapsed: false,
+            bookmarked: false,
           };
 
           // then, create a new node with no text
@@ -593,6 +611,7 @@ export default class LoomPlugin extends Plugin {
             parentId: inRangeNode,
             unread: false,
             collapsed: false,
+            bookmarked: false,
           };
 
           // move the children to under the after node
@@ -747,6 +766,7 @@ export default class LoomPlugin extends Plugin {
       parentId: null,
       unread: false,
       collapsed: false,
+      bookmarked: false,
     };
     this.state[file.path].current = id;
 
@@ -823,6 +843,7 @@ export default class LoomPlugin extends Plugin {
         parentId: state.current,
         unread: true,
         collapsed: false,
+        bookmarked: false,
       };
       ids.push(id);
     }
@@ -1054,7 +1075,7 @@ class LoomView extends ItemView {
     const rootNodes = nodes.filter(([, node]) => node.parentId === null);
     if (rootNodes.length === 1) onlyRootNode = rootNodes[0][0];
 
-    const renderNode = (node: Node, id: string, container: HTMLElement) => {
+    const renderNode = (node: Node, id: string, container: HTMLElement, children: boolean) => {
       // div for the node and its children
       const nodeDiv = container.createDiv({});
 
@@ -1069,7 +1090,7 @@ class LoomView extends ItemView {
       // an expand/collapse button if the node has children
       const hasChildren =
         nodes.filter(([, node]) => node.parentId === id).length > 0;
-      if (hasChildren) {
+      if (children && hasChildren) {
         const collapseDiv = itemDiv.createDiv({
           cls: `collapse-icon loom-collapse${
             node.collapsed ? " is-collapsed" : ""
@@ -1079,6 +1100,12 @@ class LoomView extends ItemView {
         collapseDiv.addEventListener("click", () =>
           this.app.workspace.trigger("loom:toggle-collapse", id)
         );
+      }
+
+      // a bookmark icon if the node is bookmarked
+      if (node.bookmarked) {
+        const bookmarkDiv = itemDiv.createDiv({ cls: "loom-node-bookmark" });
+        setIcon(bookmarkDiv, "bookmark");
       }
 
       // an unread indicator if the node is unread
@@ -1125,6 +1152,16 @@ class LoomView extends ItemView {
             item.setIcon("arrow-up");
             item.onClick(() => this.app.workspace.trigger("loom:hoist", id));
           }
+        });
+        menu.addItem((item) => {
+          if (state.nodes[id].bookmarked) {
+            item.setTitle("Remove bookmark");
+            item.setIcon("bookmark-minus");
+          } else {
+            item.setTitle("Bookmark");
+            item.setIcon("bookmark");
+          }
+          item.onClick(() => this.app.workspace.trigger("loom:toggle-bookmark", id));
         });
 
         menu.addSeparator();
@@ -1182,14 +1219,22 @@ class LoomView extends ItemView {
           this.app.workspace.trigger("loom:hoist", id)
         );
 
+      if (state.nodes[id].bookmarked)
+        itemButton("Remove bookmark", "bookmark-minus", () =>
+          this.app.workspace.trigger("loom:toggle-bookmark", id)
+        );
+      else
+        itemButton("Bookmark", "bookmark", () =>
+          this.app.workspace.trigger("loom:toggle-bookmark", id)
+        );
+
       if (id !== onlyRootNode)
         itemButton("Delete", "trash", () =>
           this.app.workspace.trigger("loom:delete", id)
         );
 
       // render children if the node is not collapsed
-      if (!node.collapsed) {
-        // if the node is too narrow, render a hoist button instead
+      if (children && !node.collapsed) {
         const hasChildren =
           nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
@@ -1215,8 +1260,21 @@ class LoomView extends ItemView {
       container: HTMLElement
     ) => {
       const children = nodes.filter(([, node]) => node.parentId === parentId);
-      for (const [id, node] of children) renderNode(node, id, container);
+      for (const [id, node] of children) renderNode(node, id, container, true);
     };
+
+    // bookmark list
+    const bookmarksDiv = container.createDiv({ cls: "loom-section" });
+    const bookmarks = nodes.filter(([, node]) => node.bookmarked);
+    const bookmarkHeader = bookmarksDiv.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
+    bookmarkHeader.createEl("b", { text: "Bookmarks", cls: "tree-item-inner" });
+    bookmarkHeader.createEl("span", { text: `${bookmarks.length}`, cls: "tree-item-flair-outer loom-section-count" });
+    for (const [id, node] of bookmarks) renderNode(node, id, bookmarksDiv, false);
+
+    // main tree header
+    const treeHeader = container.createDiv({ cls: "tree-item-self loom-node loom-section-header" });
+    const treeHeaderText = state.hoisted.length > 0 ? "Hoisted node" : "All nodes";
+    treeHeader.createEl("b", { text: treeHeaderText, cls: "tree-item-inner" });
 
     // if there is a hoisted node, it is the root node
     // otherwise, all children of `null` are the root nodes
@@ -1224,7 +1282,8 @@ class LoomView extends ItemView {
       renderNode(
         state.nodes[state.hoisted[state.hoisted.length - 1]],
         state.hoisted[state.hoisted.length - 1],
-        container
+        container,
+        true
       );
     else renderChildren(null, container);
 

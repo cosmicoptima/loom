@@ -78,6 +78,13 @@
   padding: 0.35em 0 0.35em 0.6em;
 }
 
+.loom-node-bookmark {
+  display: flex;
+  align-items: center;
+  margin-left: 0.3em;
+  margin-right: -0.3em;
+}
+
 .loom-node-unread {
   font-weight: bold !important;
 }
@@ -107,4 +114,16 @@
 
 .loom-spacer {
   padding-right: 0.6em;
+}
+
+.loom-section {
+  margin-bottom: 0.5em;
+}
+
+.loom-section-header {
+  padding: 0.35em;
+}
+
+.loom-section-count {
+  color: var(--text-faint);
 }
