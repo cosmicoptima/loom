@@ -939,6 +939,7 @@ class LoomView extends ItemView {
     const setting = (
       label: string,
       id: string,
+      name: string,
       value: string,
       type: "text" | "number",
       parse: (value: string) => any
@@ -951,14 +952,15 @@ class LoomView extends ItemView {
         attr: { id },
       });
       input.addEventListener("blur", () =>
-        this.app.workspace.trigger("loom:set-setting", id, parse(input.value))
+        this.app.workspace.trigger("loom:set-setting", name, parse(input.value))
       );
     };
 
-    setting("Model", "loom-model", settings.model, "text", (value) => value);
+    setting("Model", "loom-model", "model", settings.model, "text", (value) => value);
     setting(
       "Length (in tokens)",
       "loom-max-tokens",
+      "maxTokens",
       String(settings.maxTokens),
       "number",
       (value) => parseInt(value)
@@ -966,6 +968,7 @@ class LoomView extends ItemView {
     setting(
       "Temperature",
       "loom-temperature",
+      "temperature",
       String(settings.temperature),
       "number",
       (value) => parseFloat(value)
@@ -973,6 +976,7 @@ class LoomView extends ItemView {
     setting(
       "Number of completions",
       "loom-n",
+      "n",
       String(settings.n),
       "number",
       (value) => parseInt(value)
