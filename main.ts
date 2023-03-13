@@ -1115,6 +1115,21 @@ class LoomView extends ItemView {
         const menu = new Menu();
 
         menu.addItem((item) => {
+          if (state.hoisted[state.hoisted.length - 1] === id) {
+            item.setTitle("Unhoist");
+            item.setIcon("arrow-down");
+            item.onClick(() => this.app.workspace.trigger("loom:unhoist"));
+          }
+          else {
+            item.setTitle("Hoist");
+            item.setIcon("arrow-up");
+            item.onClick(() => this.app.workspace.trigger("loom:hoist", id));
+          }
+        });
+
+        menu.addSeparator();
+
+        menu.addItem((item) => {
           item.setTitle("Create child");
           item.setIcon("plus");
           item.onClick(() => this.app.workspace.trigger("loom:create-child", id));
@@ -1124,6 +1139,29 @@ class LoomView extends ItemView {
           item.setIcon("list-plus");
           item.onClick(() => this.app.workspace.trigger("loom:create-sibling", id));
         });
+
+        menu.addSeparator();
+
+        menu.addItem((item) => {
+          item.setTitle("Delete all children");
+          item.setIcon("x");
+          item.onClick(() => this.app.workspace.trigger("loom:clear-children", id));
+        });
+        menu.addItem((item) => {
+          item.setTitle("Delete all siblings");
+          item.setIcon("list-x");
+          item.onClick(() => this.app.workspace.trigger("loom:clear-siblings", id));
+        });
+
+        if (id !== onlyRootNode) {
+          menu.addSeparator();
+
+          menu.addItem((item) => {
+            item.setTitle("Delete");
+            item.setIcon("trash");
+            item.onClick(() => this.app.workspace.trigger("loom:delete", id));
+          });
+        }
 
         const rect = itemDiv.getBoundingClientRect();
         menu.showAtPosition({ x: rect.right, y: rect.top });
@@ -1137,13 +1175,6 @@ class LoomView extends ItemView {
         itemButton("Hoist", "arrow-up", () =>
           this.app.workspace.trigger("loom:hoist", id)
         );
-
-      // itemButton("Create sibling", "list-plus", () =>
-      //   this.app.workspace.trigger("loom:create-sibling", id)
-      // );
-      // itemButton("Create child", "plus", () =>
-      //   this.app.workspace.trigger("loom:create-child", id)
-      // );
 
       if (id !== onlyRootNode)
         itemButton("Delete", "trash", () =>
