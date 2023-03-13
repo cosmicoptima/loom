@@ -81,16 +81,20 @@ export default class LoomPlugin extends Plugin {
     });
   }
 
+  setOpenAI() {
+    const configuration = new Configuration({
+      apiKey: this.settings.apiKey,
+    });
+    this.openai = new OpenAIApi(configuration);
+  }
+
   async onload() {
     await this.loadSettings();
     await this.loadState();
 
     this.addSettingTab(new LoomSettingTab(this.app, this));
 
-    const configuration = new Configuration({
-      apiKey: this.settings.apiKey,
-    });
-    this.openai = new OpenAIApi(configuration);
+    this.setOpenAI();
 
     this.addCommand({
       id: "loom-complete",
@@ -894,6 +898,7 @@ export default class LoomPlugin extends Plugin {
 
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
+    this.setOpenAI();
   }
 }
 
