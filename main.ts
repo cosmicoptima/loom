@@ -158,7 +158,7 @@ export default class LoomPlugin extends Plugin {
 
     this.addCommand({
       id: "loom-break-at-point",
-      name: "Split current node into: parent node before cursor, child node after cursor, and new child node",
+      name: "Branch from current point",
       callback: () =>
         withState((state) =>
           this.app.workspace.trigger("loom:break-at-point", state.current)
