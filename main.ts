@@ -1208,7 +1208,7 @@ class LoomView extends ItemView {
         e.preventDefault();
         showMenu();
       });
-      itemButton("Menu", "menu", showMenu);
+      itemButton("Show menu", "menu", showMenu);
 
       if (state.hoisted[state.hoisted.length - 1] === id)
         itemButton("Unhoist", "arrow-down", () =>
