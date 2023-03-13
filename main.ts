@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   n: 5,
   temperature: 1,
   showSettings: false,
-  cloneParentOnEdit: true,
+  cloneParentOnEdit: false,
 };
 
 interface Node {
@@ -336,7 +336,25 @@ export default class LoomPlugin extends Plugin {
             // `cloneParent`: create a sibling of the ancestor's parent with the new text
             const cloneParent = (i: number) => {
               const newPrefix = ancestorTexts.slice(0, i).join("");
-              const newText = text.substring(newPrefix.length);
+              const followingText = text.substring(newPrefix.length);
+
+              const { children, newText } = (() => {
+                for (let j = familyTexts.length - 1; j >= 0; j--) {
+                  const suffix = familyTexts.slice(j).join("");
+                  if (followingText.endsWith(suffix)) continue;
+
+                  const lastSuffix = familyTexts.slice(j + 1).join("");
+                  return {
+                    children: j + 1,
+                    newText: followingText.substring(
+                      0,
+                      followingText.length - lastSuffix.length
+                    ),
+                  };
+                }
+
+                throw new Error("unreachable"); // TODO
+              })();
 
               const id = uuidv4();
               this.state[view.file.path].nodes[id] = {
@@ -346,7 +364,19 @@ export default class LoomPlugin extends Plugin {
                 collapsed: false,
               };
 
-              this.app.workspace.trigger("loom:switch-to", id);
+              let parentId = id;
+              for (let j = children; j < familyTexts.length; j++) {
+                const childId = uuidv4();
+                this.state[view.file.path].nodes[childId] = {
+                  text: familyTexts[j],
+                  parentId,
+                  unread: false,
+                  collapsed: false,
+                };
+                parentId = childId;
+              }
+
+              this.app.workspace.trigger("loom:switch-to", parentId);
             };
 
             // `editNode`: edit the ancestor's text to match the in-range section of the editor's text
@@ -406,7 +436,9 @@ export default class LoomPlugin extends Plugin {
           this.state[file.path].nodes[id].lastVisited = Date.now();
 
           const ancestors = this.family(id, this.state[file.path]).slice(0, -1);
-          ancestors.forEach((id) => this.state[file.path].nodes[id].collapsed = false);
+          ancestors.forEach(
+            (id) => (this.state[file.path].nodes[id].collapsed = false)
+          );
 
           this.editor.setValue(this.fullText(id, this.state[file.path]));
         })
@@ -956,7 +988,14 @@ class LoomView extends ItemView {
       );
     };
 
-    setting("Model", "loom-model", "model", settings.model, "text", (value) => value);
+    setting(
+      "Model",
+      "loom-model",
+      "model",
+      settings.model,
+      "text",
+      (value) => value
+    );
     setting(
       "Length (in tokens)",
       "loom-max-tokens",
@@ -1008,7 +1047,7 @@ class LoomView extends ItemView {
         cls: `is-clickable outgoing-link-item tree-item-self loom-node${
           node.unread ? " loom-node-unread" : ""
         }${id === state.current ? " is-active" : ""}`,
-        attr: { "id": `loom-node-${id}` },
+        attr: { id: `loom-node-${id}` },
       });
 
       // an expand/collapse button if the node has children
@@ -1080,7 +1119,8 @@ class LoomView extends ItemView {
       // render children if the node is not collapsed
       if (!node.collapsed) {
         // if the node is too narrow, render a hoist button instead
-        const hasChildren = nodes.filter(([, node]) => node.parentId === id).length > 0;
+        const hasChildren =
+          nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
           const hoistButton = nodeDiv.createDiv({ cls: "loom-hoist-button" });
           setIcon(hoistButton, "arrow-up");
@@ -1119,7 +1159,7 @@ class LoomView extends ItemView {
 
     // restore scroll position
     this.containerEl.scrollTop = scroll;
-    
+
     // scroll to current node if it is not visible
     const current = document.getElementById(`loom-node-${state.current}`);
     if (current) {
