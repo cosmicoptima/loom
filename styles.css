@@ -56,9 +56,9 @@
 }
 
 .loom-children {
-  margin-left: 0.8em;
+  margin-left: 0.85em;
   padding-left: 0.6em;
-  border-left: 1px solid var(--text-faint);
+  border-left: 1px solid var(--color-base-35);
 }
 
 .loom-node {
