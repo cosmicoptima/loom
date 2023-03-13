@@ -71,6 +71,30 @@
   background-color: var(--nav-item-background-active);
 }
 
+.loom-node-red {
+  background-color: rgba(var(--color-red-rgb), 0.2) !important;
+}
+
+.loom-node-orange {
+  background-color: rgba(var(--color-orange-rgb), 0.2) !important;
+}
+
+.loom-node-yellow {
+  background-color: rgba(var(--color-yellow-rgb), 0.2) !important;
+}
+
+.loom-node-green {
+  background-color: rgba(var(--color-green-rgb), 0.2) !important;
+}
+
+.loom-node-blue {
+  background-color: rgba(var(--color-blue-rgb), 0.2) !important;
+}
+
+.loom-node-purple {
+  background-color: rgba(var(--color-purple-rgb), 0.2) !important;
+}
+
 .loom-node-inner {
   white-space: nowrap;
   overflow: hidden;

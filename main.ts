@@ -40,6 +40,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
   cloneParentOnEdit: false,
 };
 
+type Color = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
+
 interface Node {
   text: string;
   parentId: string | null;
@@ -47,6 +49,7 @@ interface Node {
   lastVisited?: number;
   collapsed: boolean;
   bookmarked: boolean;
+  color: Color;
 }
 
 interface NoteState {
@@ -313,6 +316,7 @@ export default class LoomPlugin extends Plugin {
                 unread: false,
                 collapsed: false,
                 bookmarked: false,
+                color: null,
               };
 
               return;
@@ -375,6 +379,7 @@ export default class LoomPlugin extends Plugin {
                 unread: false,
                 collapsed: false,
                 bookmarked: false,
+                color: null,
               };
 
               let parentId = id;
@@ -386,6 +391,7 @@ export default class LoomPlugin extends Plugin {
                   unread: false,
                   collapsed: false,
                   bookmarked: false,
+                  color: null,
                 };
                 parentId = childId;
               }
@@ -496,6 +502,13 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-ignore
+      this.app.workspace.on("loom:set-color", (id: string, color: Color) =>
+        this.wftsar((file) => (this.state[file.path].nodes[id].color = color))
+      )
+    );
+
+    this.registerEvent(
+      // @ts-ignore
       this.app.workspace.on("loom:create-child", (id: string) =>
         this.withFile((file) => {
           const newId = uuidv4();
@@ -505,6 +518,7 @@ export default class LoomPlugin extends Plugin {
             unread: false,
             collapsed: false,
             bookmarked: false,
+            color: null,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -523,6 +537,7 @@ export default class LoomPlugin extends Plugin {
             unread: false,
             collapsed: false,
             bookmarked: false,
+            color: null,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -541,6 +556,7 @@ export default class LoomPlugin extends Plugin {
             unread: false,
             collapsed: false,
             bookmarked: false,
+            color: null,
           };
 
           this.app.workspace.trigger("loom:switch-to", newId);
@@ -622,6 +638,7 @@ export default class LoomPlugin extends Plugin {
             unread: false,
             collapsed: false,
             bookmarked: false,
+            color: null,
           };
 
           // then, create a new node with no text
@@ -632,6 +649,7 @@ export default class LoomPlugin extends Plugin {
             unread: false,
             collapsed: false,
             bookmarked: false,
+            color: null,
           };
 
           // move the children to under the after node
@@ -787,6 +805,7 @@ export default class LoomPlugin extends Plugin {
       unread: false,
       collapsed: false,
       bookmarked: false,
+      color: null,
     };
     this.state[file.path].current = id;
 
@@ -864,6 +883,7 @@ export default class LoomPlugin extends Plugin {
         unread: true,
         collapsed: false,
         bookmarked: false,
+        color: null,
       };
       ids.push(id);
     }
@@ -1103,7 +1123,7 @@ class LoomView extends ItemView {
       const itemDiv = nodeDiv.createDiv({
         cls: `is-clickable outgoing-link-item tree-item-self loom-node${
           node.unread ? " loom-node-unread" : ""
-        }${id === state.current ? " is-active" : ""}`,
+        }${id === state.current ? " is-active" : ""}${node.color ? ` loom-node-${node.color}` : ""}`,
         attr: { id: `loom-node-${id}` },
       });
 
@@ -1182,6 +1202,33 @@ class LoomView extends ItemView {
             item.setIcon("bookmark");
           }
           item.onClick(() => this.app.workspace.trigger("loom:toggle-bookmark", id));
+        });
+        menu.addItem((item) => {
+          item.setTitle("Set color to...");
+          item.setIcon("paint-bucket");
+          item.onClick(() => {
+            const colorMenu = new Menu();
+
+            const colors = [
+              { title: "Red", color: "red", icon: "paint-bucket" },
+              { title: "Orange", color: "orange", icon: "paint-bucket" },
+              { title: "Yellow", color: "yellow", icon: "paint-bucket" },
+              { title: "Green", color: "green", icon: "paint-bucket" },
+              { title: "Blue", color: "blue", icon: "paint-bucket" },
+              { title: "Purple", color: "purple", icon: "paint-bucket" },
+              { title: "Clear color", color: null, icon: "x" },
+            ];
+            for (const { title, color, icon } of colors) {
+              colorMenu.addItem((item) => {
+                item.setTitle(title);
+                item.setIcon(icon);
+                item.onClick(() => this.app.workspace.trigger("loom:set-color", id, color));
+              });
+            }
+
+            const rect = itemDiv.getBoundingClientRect();
+            colorMenu.showAtPosition({ x: rect.right, y: rect.top });
+          });
         });
 
         menu.addSeparator();
