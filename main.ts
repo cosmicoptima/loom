@@ -468,7 +468,10 @@ export default class LoomPlugin extends Plugin {
 
           this.editor.setValue(this.fullText(id, this.state[file.path]));
 
-          const linesAfter = this.editor.getValue().split("\n").slice(0, cursor.line);
+          const linesAfter = this.editor
+            .getValue()
+            .split("\n")
+            .slice(0, cursor.line);
           let different = false;
           for (let i = 0; i < cursor.line; i++) {
             if (linesBefore[i] !== linesAfter[i]) {
@@ -483,8 +486,7 @@ export default class LoomPlugin extends Plugin {
             const line = this.editor.lineCount() - 1;
             const ch = this.editor.getLine(line).length;
             this.editor.setCursor({ line, ch });
-          } else
-            this.editor.setCursor(cursor);
+          } else this.editor.setCursor(cursor);
         })
       )
     );
@@ -606,7 +608,7 @@ export default class LoomPlugin extends Plugin {
               color: null,
             };
             this.app.workspace.trigger("loom:switch-to", newId);
-          };
+          }
         })
       )
     );
@@ -615,7 +617,9 @@ export default class LoomPlugin extends Plugin {
       // @ts-ignore
       this.app.workspace.on("loom:delete", (id: string) =>
         this.wftsar((file) => {
-          const rootNodes = Object.entries(this.state[file.path].nodes).filter(([, node]) => node.parentId === null).map(([id]) => id);
+          const rootNodes = Object.entries(this.state[file.path].nodes)
+            .filter(([, node]) => node.parentId === null)
+            .map(([id]) => id);
           if (rootNodes.length === 1 && rootNodes[0] === id) {
             new Notice("The last root node can't be deleted");
             return;
@@ -1373,7 +1377,9 @@ class LoomView extends ItemView {
         const hasChildren =
           nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
-          const hoistButton = nodeDiv.createDiv({ cls: "loom-node-footer loom-hoist-button" });
+          const hoistButton = nodeDiv.createDiv({
+            cls: "loom-node-footer loom-hoist-button",
+          });
           setIcon(hoistButton, "arrow-up");
           hoistButton.createEl("span", {
             text: "Show more...",
