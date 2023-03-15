@@ -110,7 +110,7 @@ export default class LoomPlugin extends Plugin {
 
     this.addCommand({
       id: "loom-complete",
-      name: "Complete",
+      name: "Complete from current point",
       icon: "wand",
       callback: async () => this.complete(),
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
@@ -781,6 +781,9 @@ export default class LoomPlugin extends Plugin {
 
     const state = this.state[file.path];
 
+    this.breakAtPoint();
+    this.app.workspace.trigger("loom:switch-to", state.current);
+    
     this.state[file.path].generating = state.current;
     this.save();
     this.view.render();
@@ -961,12 +964,10 @@ export default class LoomPlugin extends Plugin {
 
       // if cursor is at the beginning of the node, create a sibling
       if (i === 0) {
-        this.app.workspace.trigger("loom:create-sibling", family[0]);
-        return;
+        return null;
         // if cursor is at the end of the node, create a child
       } else if (end) {
-        this.app.workspace.trigger("loom:create-child", current);
-        return;
+        return current;
       }
 
       const inRangeNode = family[n];
