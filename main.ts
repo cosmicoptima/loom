@@ -57,6 +57,7 @@ interface NoteState {
   current: string;
   hoisted: string[];
   nodes: Record<string, Node>;
+  generating: string | null;
 }
 
 export default class LoomPlugin extends Plugin {
@@ -305,6 +306,7 @@ export default class LoomPlugin extends Plugin {
                 current: null as any, // `current` will be defined later
                 hoisted: [] as string[],
                 nodes: {},
+                generating: null,
               };
 
             // if this note has no current node, set it to the editor's text and return
@@ -591,92 +593,20 @@ export default class LoomPlugin extends Plugin {
       // @ts-ignore
       this.app.workspace.on("loom:break-at-point", () =>
         this.withFile((file) => {
-          // split the current node into:
-          //   - parent node with text before cursor
-          //   - child node with text after cursor
-          //   - new child node with no text
+          const parentId = this.breakAtPoint();
 
-          const current = this.state[file.path].current;
-          const cursor = this.editor.getCursor();
-
-          // first, get the cursor's position in the full text
-          let cursorPos = 0;
-          for (let i = 0; i < cursor.line; i++)
-            cursorPos += this.editor.getLine(i).length + 1;
-          cursorPos += cursor.ch;
-
-          const family = this.family(current, this.state[file.path]);
-          const familyTexts = family.map(
-            (id) => this.state[file.path].nodes[id].text
-          );
-
-          // find the node that the cursor is in
-          let end = false;
-          let i = cursorPos;
-          let n = 0;
-          while (true) {
-            if (i < familyTexts[n].length) break;
-            if (n === family.length - 1) {
-              end = true;
-              break;
-            }
-            i -= familyTexts[n].length;
-            n++;
-          }
-
-          // if cursor is at the beginning of the node, create a sibling
-          if (i === 0) {
-            this.app.workspace.trigger("loom:create-sibling", family[0]);
-            return;
-            // if cursor is at the end of the node, create a child
-          } else if (end) {
-            this.app.workspace.trigger("loom:create-child", current);
-            return;
-          }
-
-          const inRangeNode = family[n];
-          const inRangeNodeText = familyTexts[n];
-          const currentCursorPos = i;
-
-          // then, get the text before and after the cursor
-          const before = inRangeNodeText.substring(0, currentCursorPos);
-          const after = inRangeNodeText.substring(currentCursorPos);
-
-          // then, set the in-range node's text to the text before the cursor
-          this.state[file.path].nodes[inRangeNode].text = before;
-
-          // get the in-range node's children, which will be moved later
-          const children = Object.values(this.state[file.path].nodes).filter(
-            (node) => node.parentId === inRangeNode
-          );
-
-          // then, create a new node with the text after the cursor
-          const afterId = uuidv4();
-          this.state[file.path].nodes[afterId] = {
-            text: after,
-            parentId: inRangeNode,
-            unread: false,
-            collapsed: false,
-            bookmarked: false,
-            color: null,
+          if (parentId !== undefined) {
+            const newId = uuidv4();
+            this.state[file.path].nodes[newId] = {
+              text: "",
+              parentId,
+              unread: false,
+              collapsed: false,
+              bookmarked: false,
+              color: null,
+            };
+            this.app.workspace.trigger("loom:switch-to", newId);
           };
-
-          // then, create a new node with no text
-          const newId = uuidv4();
-          this.state[file.path].nodes[newId] = {
-            text: "",
-            parentId: inRangeNode,
-            unread: false,
-            collapsed: false,
-            bookmarked: false,
-            color: null,
-          };
-
-          // move the children to under the after node
-          children.forEach((child) => (child.parentId = afterId));
-
-          // switch to the new node
-          this.app.workspace.trigger("loom:switch-to", newId);
         })
       )
     );
@@ -846,6 +776,11 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.style.display = "inline-flex";
 
     const state = this.state[file.path];
+
+    this.state[file.path].generating = state.current;
+    this.save();
+    this.view.render();
+
     let prompt = this.fullText(state.current, state);
 
     // remove a trailing space if there is one
@@ -917,6 +852,7 @@ export default class LoomPlugin extends Plugin {
     // switch to the first completion
     this.app.workspace.trigger("loom:switch-to", ids[0]);
 
+    this.state[file.path].generating = null;
     this.save();
     this.view.render();
 
@@ -983,6 +919,84 @@ export default class LoomPlugin extends Plugin {
 
     if (children.length === 0) return null;
     return children[0][0];
+  }
+
+  breakAtPoint(): string | null | undefined {
+    return this.withFile((file) => {
+      // split the current node into:
+      //   - parent node with text before cursor
+      //   - child node with text after cursor
+
+      const current = this.state[file.path].current;
+      const cursor = this.editor.getCursor();
+
+      // first, get the cursor's position in the full text
+      let cursorPos = 0;
+      for (let i = 0; i < cursor.line; i++)
+        cursorPos += this.editor.getLine(i).length + 1;
+      cursorPos += cursor.ch;
+
+      const family = this.family(current, this.state[file.path]);
+      const familyTexts = family.map(
+        (id) => this.state[file.path].nodes[id].text
+      );
+
+      // find the node that the cursor is in
+      let end = false;
+      let i = cursorPos;
+      let n = 0;
+      while (true) {
+        if (i < familyTexts[n].length) break;
+        if (n === family.length - 1) {
+          end = true;
+          break;
+        }
+        i -= familyTexts[n].length;
+        n++;
+      }
+
+      // if cursor is at the beginning of the node, create a sibling
+      if (i === 0) {
+        this.app.workspace.trigger("loom:create-sibling", family[0]);
+        return;
+        // if cursor is at the end of the node, create a child
+      } else if (end) {
+        this.app.workspace.trigger("loom:create-child", current);
+        return;
+      }
+
+      const inRangeNode = family[n];
+      const inRangeNodeText = familyTexts[n];
+      const currentCursorPos = i;
+
+      // then, get the text before and after the cursor
+      const before = inRangeNodeText.substring(0, currentCursorPos);
+      const after = inRangeNodeText.substring(currentCursorPos);
+
+      // then, set the in-range node's text to the text before the cursor
+      this.state[file.path].nodes[inRangeNode].text = before;
+
+      // get the in-range node's children, which will be moved later
+      const children = Object.values(this.state[file.path].nodes).filter(
+        (node) => node.parentId === inRangeNode
+      );
+
+      // then, create a new node with the text after the cursor
+      const afterId = uuidv4();
+      this.state[file.path].nodes[afterId] = {
+        text: after,
+        parentId: inRangeNode,
+        unread: false,
+        collapsed: false,
+        bookmarked: false,
+        color: null,
+      };
+
+      // move the children to under the after node
+      children.forEach((child) => (child.parentId = afterId));
+
+      return inRangeNode;
+    });
   }
 
   async loadSettings() {
@@ -1344,16 +1358,26 @@ class LoomView extends ItemView {
           this.app.workspace.trigger("loom:delete", id)
         );
 
+      // indicate if the node is generating children
+      if (state.generating === id) {
+        const generatingDiv = nodeDiv.createDiv({ cls: "loom-node-footer" });
+        setIcon(generatingDiv, "refresh-cw");
+        generatingDiv.createEl("span", {
+          cls: "loom-node-footer-text",
+          text: "Generating...",
+        });
+      }
+
       // render children if the node is not collapsed
       if (children && !node.collapsed) {
         const hasChildren =
           nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
-          const hoistButton = nodeDiv.createDiv({ cls: "loom-hoist-button" });
+          const hoistButton = nodeDiv.createDiv({ cls: "loom-node-footer loom-hoist-button" });
           setIcon(hoistButton, "arrow-up");
           hoistButton.createEl("span", {
             text: "Show more...",
-            cls: "loom-hoist-button-text",
+            cls: "loom-node-footer-text",
           });
 
           hoistButton.addEventListener("click", () =>

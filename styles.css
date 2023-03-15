@@ -36,7 +36,7 @@
   transform: rotate(-90deg);
 }
 
-.loom-hoist-button {
+.loom-node-footer {
   color: var(--text-faint);
   font-size: 0.9em;
   margin: 0.35em 0 0.35em 1.6em;
@@ -51,7 +51,7 @@
   color: var(--text-normal);
 }
 
-.loom-hoist-button-text {
+.loom-node-footer-text {
   margin-left: 0.2em;
 }
 
