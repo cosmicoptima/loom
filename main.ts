@@ -685,6 +685,12 @@ export default class LoomPlugin extends Plugin {
       // @ts-ignore
       this.app.workspace.on("loom:delete", (id: string) =>
         this.wftsar((file) => {
+          const rootNodes = Object.entries(this.state[file.path].nodes).filter(([, node]) => node.parentId === null).map(([id]) => id);
+          if (rootNodes.length === 1 && rootNodes[0] === id) {
+            new Notice("The last root node can't be deleted");
+            return;
+          }
+
           this.state[file.path].hoisted = this.state[file.path].hoisted.filter(
             (id_) => id_ !== id
           );
