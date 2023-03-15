@@ -15,6 +15,7 @@ import {
 import GPT3Tokenizer from "gpt3-tokenizer";
 import { Configuration, OpenAIApi } from "openai";
 import { v4 as uuidv4 } from "uuid";
+import * as _ from "lodash";
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
@@ -460,12 +461,28 @@ export default class LoomPlugin extends Plugin {
             (id) => (this.state[file.path].nodes[id].collapsed = false)
           );
 
+          const cursor = this.editor.getCursor();
+          const linesBefore = this.editor.getValue().split("\n");
+
           this.editor.setValue(this.fullText(id, this.state[file.path]));
 
-          const lines = this.editor.getValue().split("\n");
-          const line = lines.length - 1;
-          const ch = lines[line].length;
-          this.editor.setCursor({ line, ch });
+          const linesAfter = this.editor.getValue().split("\n").slice(0, cursor.line);
+          let different = false;
+          for (let i = 0; i < cursor.line; i++) {
+            if (linesBefore[i] !== linesAfter[i]) {
+              different = true;
+              break;
+            }
+          }
+          if (linesBefore[cursor.line] !== this.editor.getLine(cursor.line))
+            different = true;
+
+          if (different) {
+            const line = this.editor.lineCount() - 1;
+            const ch = this.editor.getLine(line).length;
+            this.editor.setCursor({ line, ch });
+          } else
+            this.editor.setCursor(cursor);
         })
       )
     );
