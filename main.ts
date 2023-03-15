@@ -783,7 +783,7 @@ export default class LoomPlugin extends Plugin {
 
     this.breakAtPoint();
     this.app.workspace.trigger("loom:switch-to", state.current);
-    
+
     this.state[file.path].generating = state.current;
     this.save();
     this.view.render();

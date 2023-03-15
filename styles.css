@@ -77,25 +77,43 @@
 .loom-node-red {
   background-color: rgba(var(--color-red-rgb), 0.2) !important;
 }
+.loom-node-red.is-active {
+  background-color: rgba(var(--color-red-rgb), 0.3) !important;
+}
 
 .loom-node-orange {
   background-color: rgba(var(--color-orange-rgb), 0.2) !important;
+}
+.loom-node-orange.is-active {
+  background-color: rgba(var(--color-orange-rgb), 0.3) !important;
 }
 
 .loom-node-yellow {
   background-color: rgba(var(--color-yellow-rgb), 0.2) !important;
 }
+.loom-node-yellow.is-active {
+  background-color: rgba(var(--color-yellow-rgb), 0.3) !important;
+}
 
 .loom-node-green {
   background-color: rgba(var(--color-green-rgb), 0.2) !important;
+}
+.loom-node-green.is-active {
+  background-color: rgba(var(--color-green-rgb), 0.3) !important;
 }
 
 .loom-node-blue {
   background-color: rgba(var(--color-blue-rgb), 0.2) !important;
 }
+.loom-node-blue.is-active {
+  background-color: rgba(var(--color-blue-rgb), 0.3) !important;
+}
 
 .loom-node-purple {
   background-color: rgba(var(--color-purple-rgb), 0.2) !important;
+}
+.loom-node-purple.is-active {
+  background-color: rgba(var(--color-purple-rgb), 0.3) !important;
 }
 
 .loom-node-inner {
