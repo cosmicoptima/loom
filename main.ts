@@ -461,6 +461,11 @@ export default class LoomPlugin extends Plugin {
           );
 
           this.editor.setValue(this.fullText(id, this.state[file.path]));
+
+          const lines = this.editor.getValue().split("\n");
+          const line = lines.length - 1;
+          const ch = lines[line].length;
+          this.editor.setCursor({ line, ch });
         })
       )
     );
