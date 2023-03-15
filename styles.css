@@ -39,12 +39,15 @@
 .loom-node-footer {
   color: var(--text-faint);
   font-size: 0.9em;
-  margin: 0.35em 0 0.35em 1.6em;
+  margin-left: calc(0.85em + 1px);
+  padding: 0.35em 0 0.35em 1.2em;
   white-space: nowrap;
 
   display: flex;
   align-items: center;
   width: max-content;
+
+  border-left: 1px solid var(--color-base-35);
 }
 
 .loom-hoist-button:hover {
@@ -52,7 +55,7 @@
 }
 
 .loom-node-footer-text {
-  margin-left: 0.2em;
+  margin-left: 0.35em;
 }
 
 .loom-children {
