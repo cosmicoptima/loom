@@ -28,6 +28,7 @@
 		"gpt3-tokenizer": "^1.1.5",
 		"lodash": "^4.17.21",
 		"openai": "^3.1.0",
+		"untildify": "^4.0.0",
 		"uuid": "^9.0.0"
 	}
 }

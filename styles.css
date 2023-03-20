@@ -6,6 +6,26 @@
   margin-top: 0.5em;
 }
 
+.loom-zport {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5em;
+}
+
+.loom-zport input {
+  flex-grow: 1;
+}
+
+.loom-zport button {
+  margin-left: 0.5em;
+}
+
+.loom-vspacer {
+  padding-top: 0.5em;
+}
+
 .loom-settings {
   margin-bottom: 0.3em;
 }

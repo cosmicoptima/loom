@@ -16,6 +16,8 @@ import GPT3Tokenizer from "gpt3-tokenizer";
 import { Configuration, OpenAIApi } from "openai";
 import { v4 as uuidv4 } from "uuid";
 import * as _ from "lodash";
+import * as fs from "fs";
+const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
@@ -29,16 +31,22 @@ interface LoomSettings {
 
   showSettings: boolean;
   cloneParentOnEdit: boolean;
+  showImport: boolean;
+  showExport: boolean;
 }
 
 const DEFAULT_SETTINGS: LoomSettings = {
   apiKey: "",
+
   model: "code-davinci-002",
   maxTokens: 60,
-  n: 5,
   temperature: 1,
+  n: 5,
+
   showSettings: false,
   cloneParentOnEdit: false,
+  showImport: false,
+  showExport: false,
 };
 
 type Color = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
@@ -691,6 +699,36 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:import", (pathName: string) => this.wftsar(
+        (file) => {
+          if (!pathName) return;
+
+          const rawPathName = untildify(pathName);
+          const json = fs.readFileSync(rawPathName, "utf8");
+          const data = JSON.parse(json);
+          this.state[file.path] = data;
+          new Notice("Imported from " + rawPathName);
+        }
+      ))
+    );
+
+    this.registerEvent(
+      // @ts-ignore
+      this.app.workspace.on("loom:export", (pathName: string) => this.wftsar(
+        (file) => {
+          if (!pathName) return;
+
+          const data = this.state[file.path];
+          const json = JSON.stringify(data, null, 2);
+          const rawPathName = untildify(pathName);
+          fs.writeFileSync(rawPathName, json);
+          new Notice("Exported to " + rawPathName);
+        }
+      ))
+    );
+
+    this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
 
@@ -1051,7 +1089,7 @@ class LoomView extends ItemView {
       cls: "nav-buttons-container loom-buttons",
     });
 
-    const navButton = (
+    const settingNavButton = (
       setting: string,
       value: boolean,
       icon: string,
@@ -1067,22 +1105,64 @@ class LoomView extends ItemView {
       );
     };
 
-    navButton(
+    settingNavButton(
       "showSettings",
       settings.showSettings,
       "settings",
       "Show settings"
     );
-    navButton(
+    settingNavButton(
       "cloneParentOnEdit",
       settings.cloneParentOnEdit,
       "copy",
       "Don't allow nodes with children to be edited; clone them instead"
     );
+    settingNavButton(
+      "showImport",
+      settings.showImport,
+      "import",
+      "Import JSON"
+    );
+    settingNavButton(
+      "showExport",
+      settings.showExport,
+      "download",
+      "Export to JSON"
+    );
 
     // create the main container, which uses the `outline` class, which has
     // a margin visually consistent with other panes
     const container = this.containerEl.createDiv({ cls: "outline" });
+
+    // import/export
+
+    const importDiv = container.createDiv({
+      cls: `loom-zport${settings.showImport ? "" : " hidden"}`,
+    });
+
+    const importInput = importDiv.createEl("input", {
+      attr: { type: "text", placeholder: "Path of file to import" },
+    });
+    const importButton = importDiv.createEl("button", {});
+    setIcon(importButton, "import");
+    importButton.addEventListener("click", () =>
+      this.app.workspace.trigger("loom:import", importInput.value)
+    );
+
+    const exportDiv = container.createDiv({
+      cls: `loom-zport${settings.showExport ? "" : " hidden"}`,
+    });
+
+    const exportInput = exportDiv.createEl("input", {
+      attr: { type: "text", placeholder: "Path to export to" },
+    });
+    const exportButton = exportDiv.createEl("button", {});
+    setIcon(exportButton, "download");
+    exportButton.addEventListener("click", () =>
+      this.app.workspace.trigger("loom:export", exportInput.value)
+    );
+
+    container.createDiv({ cls: `loom-vspacer${settings.showImport || settings.showExport ? "" : " hidden"}` });
 
     // settings
 
