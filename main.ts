@@ -49,6 +49,15 @@ const DEFAULT_SETTINGS: LoomSettings = {
   showExport: false,
 };
 
+const CHAT_MODELS = [
+  "gpt-3.5-turbo",
+  "gpt-3.5-turbo-0301",
+  "gpt-4",
+  "gpt-4-0314",
+  "gpt-4-32k",
+  "gpt-4-32k-0314",
+];
+
 type Color = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
 
 interface Node {
@@ -847,15 +856,27 @@ export default class LoomPlugin extends Plugin {
     // complete, or visually display an error and return if that fails
     let completions;
     try {
-      completions = (
-        await this.openai.createCompletion({
+      if (CHAT_MODELS.contains(this.settings.model)) {
+        completions = (await this.openai.createChatCompletion({
           model: this.settings.model,
-          prompt,
+          messages: [
+            { role: "assistant", content: prompt },
+          ],
           max_tokens: this.settings.maxTokens,
           n: this.settings.n,
           temperature: this.settings.temperature,
-        })
-      ).data.choices.map((choice) => choice.text);
+        })).data.choices.map((choice) => choice.message?.content);
+      } else {
+        completions = (
+          await this.openai.createCompletion({
+            model: this.settings.model,
+            prompt,
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+          })
+        ).data.choices.map((choice) => choice.text);
+      }
     } catch (e) {
       if (e.response.status === 401)
         new Notice(
