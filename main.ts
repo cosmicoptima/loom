@@ -12,6 +12,7 @@ import {
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
+import * as cohere from "cohere-ai";
 import GPT3Tokenizer from "gpt3-tokenizer";
 import { Configuration, OpenAIApi } from "openai";
 import { v4 as uuidv4 } from "uuid";
@@ -21,9 +22,14 @@ const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
-interface LoomSettings {
-  apiKey: string;
+const PROVIDERS = ["openai", "openai-chat", "cohere"];
+type Provider = typeof PROVIDERS[number];
 
+interface LoomSettings {
+  openaiApiKey: string;
+  cohereApiKey: string;
+
+  provider: Provider;
   model: string;
   maxTokens: number;
   temperature: number;
@@ -37,8 +43,10 @@ interface LoomSettings {
 }
 
 const DEFAULT_SETTINGS: LoomSettings = {
-  apiKey: "",
+  openaiApiKey: "",
+  cohereApiKey: "",
 
+  provider: "openai",
   model: "code-davinci-002",
   maxTokens: 60,
   temperature: 1,
@@ -50,15 +58,6 @@ const DEFAULT_SETTINGS: LoomSettings = {
   showImport: false,
   showExport: false,
 };
-
-const CHAT_MODELS = [
-  "gpt-3.5-turbo",
-  "gpt-3.5-turbo-0301",
-  "gpt-4",
-  "gpt-4-0314",
-  "gpt-4-32k",
-  "gpt-4-32k-0314",
-];
 
 type Color = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
 
@@ -110,9 +109,13 @@ export default class LoomPlugin extends Plugin {
 
   setOpenAI() {
     const configuration = new Configuration({
-      apiKey: this.settings.apiKey,
+      apiKey: this.settings.openaiApiKey,
     });
     this.openai = new OpenAIApi(configuration);
+  }
+
+  setCohere() {
+    cohere.init(this.settings.cohereApiKey);
   }
 
   async onload() {
@@ -122,6 +125,7 @@ export default class LoomPlugin extends Plugin {
     this.addSettingTab(new LoomSettingTab(this.app, this));
 
     this.setOpenAI();
+    this.setCohere();
 
     this.statusBarItem = this.addStatusBarItem();
     this.statusBarItem.setText("Completing...");
@@ -858,7 +862,7 @@ export default class LoomPlugin extends Plugin {
     // complete, or visually display an error and return if that fails
     let completions;
     try {
-      if (CHAT_MODELS.contains(this.settings.model)) {
+      if (this.settings.provider === "openai-chat") {
         completions = (await this.openai.createChatCompletion({
           model: this.settings.model,
           messages: [
@@ -869,7 +873,7 @@ export default class LoomPlugin extends Plugin {
           temperature: this.settings.temperature,
           top_p: this.settings.topP,
         })).data.choices.map((choice) => choice.message?.content);
-      } else {
+      } else if (this.settings.provider === "openai") {
         completions = (
           await this.openai.createCompletion({
             model: this.settings.model,
@@ -882,16 +886,41 @@ export default class LoomPlugin extends Plugin {
         ).data.choices.map((choice) => choice.text);
       }
     } catch (e) {
-      if (e.response.status === 401)
+      if (e.response.status === 401 && ["openai", "openai-chat"].includes(this.settings.provider))
         new Notice(
           "OpenAI API key is invalid. Please provide a valid key in the settings."
         );
-      else if (e.response.status === 429)
+      else if (e.response.status === 429 && ["openai", "openai-chat"].includes(this.settings.provider))
         new Notice("OpenAI API rate limit exceeded.");
       else
         new Notice(
-          "Unknown OpenAI API error: " + e.response.data.error.message
+          "Unknown API error: " + e.response.data.error.message
         );
+
+      this.statusBarItem.style.display = "none";
+      return;
+    }
+
+    if (this.settings.provider === "cohere") {
+      const response = await cohere.generate({
+        model: this.settings.model,
+        prompt,
+        max_tokens: this.settings.maxTokens,
+        num_generations: this.settings.n,
+        temperature: this.settings.temperature,
+        p: this.settings.topP,
+      });
+      if (response.statusCode !== 200) {
+        new Notice("Cohere API responded with status code " + response.statusCode);
+
+        this.statusBarItem.style.display = "none";
+        return;
+      }
+      completions = response.body.generations.map((generation) => generation.text);
+    }
+
+    if (completions === undefined) {
+      new Notice("Invalid provider: " + this.settings.provider);
 
       this.statusBarItem.style.display = "none";
       return;
@@ -1079,6 +1108,7 @@ export default class LoomPlugin extends Plugin {
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
     this.setOpenAI();
+    this.setCohere();
   }
 }
 
@@ -1215,6 +1245,29 @@ class LoomView extends ItemView {
       );
     };
 
+    const providerDiv = settingsDiv.createDiv({ cls: "loom-setting" });
+    providerDiv.createEl("label", { text: "Provider" });
+    const providerSelect = providerDiv.createEl("select", {
+      attr: { id: "loom-provider" },
+    });
+    const providerOptions = [
+      { name: "None", value: "none" },
+      { name: "OpenAI (Completion)", value: "openai" },
+      { name: "OpenAI (Chat)", value: "openai-chat" },
+      { name: "Cohere", value: "cohere" },
+    ];
+    providerOptions.forEach((option) => {
+      const optionEl = providerSelect.createEl("option", {
+        text: option.name,
+        attr: { value: option.value },
+      });
+      if (option.value === settings.provider) {
+        optionEl.setAttribute("selected", "selected");
+      }
+    });
+    providerSelect.addEventListener("change", () =>
+      this.app.workspace.trigger("loom:set-setting", "provider", providerSelect.value)
+    );
     setting(
       "Model",
       "loom-model",
@@ -1613,12 +1666,34 @@ class LoomSettingTab extends PluginSettingTab {
     method2.createEl("kbd", { text: "Loom: Open Loom pane" });
     method2.createEl("span", { text: " command." });
 
+    new Setting(containerEl).setName("Provider").addDropdown((dropdown) => {
+      dropdown.addOption("openai", "OpenAI (Completion)");
+      dropdown.addOption("openai-chat", "OpenAI (Chat)");
+      dropdown.addOption("cohere", "Cohere");
+      dropdown.setValue(this.plugin.settings.provider);
+      dropdown.onChange(async (value) => {
+        if (PROVIDERS.find((provider) => provider === value))
+          this.plugin.settings.provider = value;
+        await this.plugin.save();
+      });
+    });
+
     new Setting(containerEl)
       .setName("OpenAI API key")
-      .setDesc("Required")
+      .setDesc("Required if using OpenAI")
       .addText((text) =>
-        text.setValue(this.plugin.settings.apiKey).onChange(async (value) => {
-          this.plugin.settings.apiKey = value;
+        text.setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
+          this.plugin.settings.openaiApiKey = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Cohere API key")
+      .setDesc("Required if using Cohere")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.cohereApiKey).onChange(async (value) => {
+          this.plugin.settings.cohereApiKey = value;
           await this.plugin.save();
         })
       );
