@@ -27,6 +27,7 @@ interface LoomSettings {
   model: string;
   maxTokens: number;
   temperature: number;
+  topP: number;
   n: number;
 
   showSettings: boolean;
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   model: "code-davinci-002",
   maxTokens: 60,
   temperature: 1,
+  topP: 1,
   n: 5,
 
   showSettings: false,
@@ -865,6 +867,7 @@ export default class LoomPlugin extends Plugin {
           max_tokens: this.settings.maxTokens,
           n: this.settings.n,
           temperature: this.settings.temperature,
+          top_p: this.settings.topP,
         })).data.choices.map((choice) => choice.message?.content);
       } else {
         completions = (
@@ -874,6 +877,7 @@ export default class LoomPlugin extends Plugin {
             max_tokens: this.settings.maxTokens,
             n: this.settings.n,
             temperature: this.settings.temperature,
+            top_p: this.settings.topP,
           })
         ).data.choices.map((choice) => choice.text);
       }
@@ -1232,6 +1236,14 @@ class LoomView extends ItemView {
       "loom-temperature",
       "temperature",
       String(settings.temperature),
+      "number",
+      (value) => parseFloat(value)
+    );
+    setting(
+      "Top p",
+      "loom-top-p",
+      "topP",
+      String(settings.topP),
       "number",
       (value) => parseFloat(value)
     );
@@ -1632,6 +1644,15 @@ class LoomSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.temperature.toString())
         .onChange(async (value) => {
           this.plugin.settings.temperature = parseFloat(value);
+          await this.plugin.save();
+        })
+    );
+
+    new Setting(containerEl).setName("Top p").addText((text) =>
+      text
+        .setValue(this.plugin.settings.topP.toString())
+        .onChange(async (value) => {
+          this.plugin.settings.topP = parseFloat(value);
           await this.plugin.save();
         })
     );
