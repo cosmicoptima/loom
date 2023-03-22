@@ -22,12 +22,13 @@ const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
-const PROVIDERS = ["openai", "openai-chat", "cohere"];
+const PROVIDERS = ["openai", "openai-chat", "cohere", "textsynth"];
 type Provider = typeof PROVIDERS[number];
 
 interface LoomSettings {
   openaiApiKey: string;
   cohereApiKey: string;
+  textsynthApiKey: string;
 
   provider: Provider;
   model: string;
@@ -45,6 +46,7 @@ interface LoomSettings {
 const DEFAULT_SETTINGS: LoomSettings = {
   openaiApiKey: "",
   cohereApiKey: "",
+  textsynthApiKey: "",
 
   provider: "openai",
   model: "code-davinci-002",
@@ -917,6 +919,41 @@ export default class LoomPlugin extends Plugin {
         return;
       }
       completions = response.body.generations.map((generation) => generation.text);
+    } else if (this.settings.provider === "textsynth") {
+      // const response = await fetch(`https://api.textsynth.com/v1/engines/${this.settings.model}/completions`, {
+      //   method: "POST",
+      //   headers: { "Authorization": `Bearer ${this.settings.textsynthApiKey}` },
+      //   body: JSON.stringify({
+      //     prompt,
+      //     max_tokens: this.settings.maxTokens,
+      //     n: this.settings.n,
+      //     temperature: this.settings.temperature,
+      //     top_p: this.settings.topP,
+      //   }),
+      // });
+      const response = await fetch("https://celeste.exposed/api/textsynth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: this.settings.textsynthApiKey,
+          model: this.settings.model,
+          prompt,
+          max_tokens: this.settings.maxTokens,
+          n: this.settings.n,
+          temperature: this.settings.temperature,
+          top_p: this.settings.topP,
+        }),
+      });
+      if (response.status !== 200) {
+        new Notice("TextSynth API responded with status code " + response.status);
+
+        this.statusBarItem.style.display = "none";
+        return;
+      }
+      if (this.settings.n === 1)
+        completions = [(await response.json()).response.text];
+      else
+        completions = (await response.json()).response.text;
     }
 
     if (completions === undefined) {
@@ -1255,6 +1292,7 @@ class LoomView extends ItemView {
       { name: "OpenAI (Completion)", value: "openai" },
       { name: "OpenAI (Chat)", value: "openai-chat" },
       { name: "Cohere", value: "cohere" },
+      { name: "TextSynth", value: "textsynth" },
     ];
     providerOptions.forEach((option) => {
       const optionEl = providerSelect.createEl("option", {
@@ -1670,6 +1708,7 @@ class LoomSettingTab extends PluginSettingTab {
       dropdown.addOption("openai", "OpenAI (Completion)");
       dropdown.addOption("openai-chat", "OpenAI (Chat)");
       dropdown.addOption("cohere", "Cohere");
+      dropdown.addOption("textsynth", "TextSynth");
       dropdown.setValue(this.plugin.settings.provider);
       dropdown.onChange(async (value) => {
         if (PROVIDERS.find((provider) => provider === value))
@@ -1694,6 +1733,16 @@ class LoomSettingTab extends PluginSettingTab {
       .addText((text) =>
         text.setValue(this.plugin.settings.cohereApiKey).onChange(async (value) => {
           this.plugin.settings.cohereApiKey = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("TextSynth API key")
+      .setDesc("Required if using TextSynth")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.textsynthApiKey).onChange(async (value) => {
+          this.plugin.settings.textsynthApiKey = value;
           await this.plugin.save();
         })
       );
