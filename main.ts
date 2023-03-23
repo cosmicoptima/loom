@@ -48,8 +48,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
   cohereApiKey: "",
   textsynthApiKey: "",
 
-  provider: "openai",
-  model: "code-davinci-002",
+  provider: "cohere",
+  model: "xlarge",
   maxTokens: 60,
   temperature: 1,
   topP: 1,
