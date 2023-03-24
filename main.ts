@@ -156,6 +156,16 @@ export default class LoomPlugin extends Plugin {
       });
     };
 
+    const openLoomPane = () => {
+      try {
+        if (this.app.workspace.getLeavesOfType("loom").length === 0)
+          this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
+        else this.app.workspace.revealLeaf(this.view.leaf);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
     this.addCommand({
       id: "loom-create-child",
       name: "Create child of current node",
@@ -293,8 +303,7 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "loom-open-pane",
       name: "Open Loom pane",
-      callback: () =>
-        this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" }),
+      callback: openLoomPane,
     });
 
     this.addCommand({
@@ -312,16 +321,7 @@ export default class LoomPlugin extends Plugin {
       return this.view;
     });
 
-    try {
-      if (!(this.app.workspace.getLeavesOfType("loom").length > 0))
-        this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
-    } catch (e) {
-      console.error(e);
-    }
-    // TODO
-    // `Cannot read properties of null (reading 'children')`
-    //
-    // this doesn't seem to cause any problems if wrapped in a try/catch
+    openLoomPane();
 
     this.registerEvent(
       this.app.workspace.on(
