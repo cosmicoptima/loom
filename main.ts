@@ -22,13 +22,16 @@ const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
-const PROVIDERS = ["openai", "openai-chat", "cohere", "textsynth"];
+const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat"];
 type Provider = typeof PROVIDERS[number];
 
 interface LoomSettings {
   openaiApiKey: string;
   cohereApiKey: string;
   textsynthApiKey: string;
+
+  ocpApiKey: string;
+  ocpUrl: string;
 
   provider: Provider;
   model: string;
@@ -47,6 +50,9 @@ const DEFAULT_SETTINGS: LoomSettings = {
   openaiApiKey: "",
   cohereApiKey: "",
   textsynthApiKey: "",
+
+  ocpApiKey: "",
+  ocpUrl: "",
 
   provider: "cohere",
   model: "xlarge",
@@ -920,17 +926,7 @@ export default class LoomPlugin extends Plugin {
       }
       completions = response.body.generations.map((generation) => generation.text);
     } else if (this.settings.provider === "textsynth") {
-      // const response = await fetch(`https://api.textsynth.com/v1/engines/${this.settings.model}/completions`, {
-      //   method: "POST",
-      //   headers: { "Authorization": `Bearer ${this.settings.textsynthApiKey}` },
-      //   body: JSON.stringify({
-      //     prompt,
-      //     max_tokens: this.settings.maxTokens,
-      //     n: this.settings.n,
-      //     temperature: this.settings.temperature,
-      //     top_p: this.settings.topP,
-      //   }),
-      // });
+      // TextSynth API doesn't have CORS enabled, so we have to proxy
       const response = await fetch("https://celeste.exposed/api/textsynth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -954,6 +950,34 @@ export default class LoomPlugin extends Plugin {
         completions = [(await response.json()).response.text];
       else
         completions = (await response.json()).response.text;
+    } else if (this.settings.provider === "ocp") {
+      let url = this.settings.ocpUrl;
+
+      if (!(url.startsWith("http://") || url.startsWith("https://"))) url = "https://" + url;
+      if (!url.endsWith("/")) url += "/";
+      url += "v1/completions";
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.settings.ocpApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          max_tokens: this.settings.maxTokens,
+          n: this.settings.n,
+          temperature: this.settings.temperature,
+          top_p: this.settings.topP,
+        }),
+      });
+      if (response.status !== 200) {
+        new Notice("OCP API responded with status code " + response.status);
+
+        this.statusBarItem.style.display = "none";
+        return;
+      }
+      completions = (await response.json()).choices.map((choice: any) => choice.text);
     }
 
     if (completions === undefined) {
@@ -1288,11 +1312,11 @@ class LoomView extends ItemView {
       attr: { id: "loom-provider" },
     });
     const providerOptions = [
-      { name: "None", value: "none" },
-      { name: "OpenAI (Completion)", value: "openai" },
-      { name: "OpenAI (Chat)", value: "openai-chat" },
       { name: "Cohere", value: "cohere" },
       { name: "TextSynth", value: "textsynth" },
+      { name: "OpenAI code-davinci-002 proxy", value: "ocp" },
+      { name: "OpenAI (Completion)", value: "openai" },
+      { name: "OpenAI (Chat)", value: "openai-chat" },
     ];
     providerOptions.forEach((option) => {
       const optionEl = providerSelect.createEl("option", {
@@ -1705,10 +1729,11 @@ class LoomSettingTab extends PluginSettingTab {
     method2.createEl("span", { text: " command." });
 
     new Setting(containerEl).setName("Provider").addDropdown((dropdown) => {
-      dropdown.addOption("openai", "OpenAI (Completion)");
-      dropdown.addOption("openai-chat", "OpenAI (Chat)");
       dropdown.addOption("cohere", "Cohere");
       dropdown.addOption("textsynth", "TextSynth");
+      dropdown.addOption("ocp", "OpenAI code-davinci-002 proxy");
+      dropdown.addOption("openai", "OpenAI (Completion)");
+      dropdown.addOption("openai-chat", "OpenAI (Chat)");
       dropdown.setValue(this.plugin.settings.provider);
       dropdown.onChange(async (value) => {
         if (PROVIDERS.find((provider) => provider === value))
@@ -1716,16 +1741,6 @@ class LoomSettingTab extends PluginSettingTab {
         await this.plugin.save();
       });
     });
-
-    new Setting(containerEl)
-      .setName("OpenAI API key")
-      .setDesc("Required if using OpenAI")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
-          this.plugin.settings.openaiApiKey = value;
-          await this.plugin.save();
-        })
-      );
 
     new Setting(containerEl)
       .setName("Cohere API key")
@@ -1743,6 +1758,36 @@ class LoomSettingTab extends PluginSettingTab {
       .addText((text) =>
         text.setValue(this.plugin.settings.textsynthApiKey).onChange(async (value) => {
           this.plugin.settings.textsynthApiKey = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("OpenAI code-davinci-002 proxy API key")
+      .setDesc("Required if using OCP")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.ocpApiKey).onChange(async (value) => {
+          this.plugin.settings.ocpApiKey = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("OpenAI code-davinci-002 proxy URL")
+      .setDesc("Required if using OCP")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.ocpUrl).onChange(async (value) => {
+          this.plugin.settings.ocpUrl = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("OpenAI API key")
+      .setDesc("Required if using OpenAI")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
+          this.plugin.settings.openaiApiKey = value;
           await this.plugin.save();
         })
       );
