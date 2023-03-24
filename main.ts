@@ -993,8 +993,9 @@ export default class LoomPlugin extends Plugin {
       if (!completion) completion = ""; // empty completions are null, apparently
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
 
-      // remove leading space, which will already be in the note
-      if (trailingSpace && completion[0] === " ")
+      if (this.settings.provider === "openai-chat")
+        if (!trailingSpace) completion = " " + completion;
+      else if (trailingSpace && completion[0] === " ")
         completion = completion.slice(1);
 
       const id = uuidv4();
