@@ -1258,12 +1258,14 @@ class LoomView extends ItemView {
     });
 
     const importInput = importDiv.createEl("input", {
-      attr: { type: "text", placeholder: "Path of file to import" },
+      attr: { type: "file", accept: ".json" },
     });
     const importButton = importDiv.createEl("button", {});
     setIcon(importButton, "import");
     importButton.addEventListener("click", () =>
-      this.app.workspace.trigger("loom:import", importInput.value)
+      // @ts-ignore
+      this.app.workspace.trigger("loom:import", importInput.files[0].path)
+      // "Property 'path' does not exist on type 'File'" yes it does
     );
 
     const exportDiv = container.createDiv({
