@@ -733,6 +733,8 @@ export default class LoomPlugin extends Plugin {
           const data = JSON.parse(json);
           this.state[file.path] = data;
           new Notice("Imported from " + rawPathName);
+
+          this.app.workspace.trigger("loom:switch-to", data.current);
         }
       ))
     );
