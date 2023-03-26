@@ -1281,7 +1281,8 @@ class LoomView extends ItemView {
         filters: [{ extensions: ["json"] }],
       }).then(
         (path: string | undefined) => {
-          if (path) this.app.workspace.trigger("loom:export", path);
+          // if (path) this.app.workspace.trigger("loom:export", path);
+          console.log(path);
         }
       )
     );
