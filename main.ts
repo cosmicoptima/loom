@@ -798,6 +798,29 @@ export default class LoomPlugin extends Plugin {
         if (!this.state[file.path]) {
           this.initializeFile(file);
         }
+
+        // @ts-expect-error
+        const editorView = this.editor.cm;
+        const plugin = editorView.plugin(loomEditorPlugin);
+
+        const state = this.state[file.path];
+
+        let ancestors: string[] = [];
+        let node: string | null = state.current;
+        while (node) {
+          node = this.state[file.path].nodes[node].parentId;
+          if (node) ancestors.push(node);
+        }
+        ancestors = ancestors.reverse();
+
+        const ancestorTexts = ancestors.map((id) => state.nodes[id].text);
+
+        const lines = ancestorTexts.join("").split("\n");
+        plugin.state = {
+          breakLine: lines.length - 1,
+          breakCh: lines.length > 0 ? lines[lines.length - 1].length : 0,
+        };
+        plugin.update();
       })
     );
 
