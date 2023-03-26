@@ -1241,12 +1241,30 @@ class LoomView extends ItemView {
       "import",
       "Import JSON"
     );
-    settingNavButton(
-      "showExport",
-      settings.showExport,
-      "download",
-      "Export to JSON"
-    );
+    // settingNavButton(
+    //   "showExport",
+    //   settings.showExport,
+    //   "download",
+    //   "Export to JSON"
+    // );
+    const exportNavButton = navButtonsContainer.createDiv({
+      cls: `clickable-icon nav-action-button${settings.showExport ? " is-active" : ""}`,
+      attr: { "aria-label": "Export to JSON" },
+    });
+    setIcon(exportNavButton, "download");
+    exportNavButton.addEventListener("click", (e) => {
+      if (e.shiftKey)
+        this.app.workspace.trigger("loom:set-setting", "showExport", !settings.showExport);
+      else
+        dialog.showSaveDialog({
+          title: "Export to JSON",
+          filters: [{ extensions: ["json"] }],
+        }).then(
+          (result: any) => {
+            if (result) this.app.workspace.trigger("loom:export", result.filePath);
+          }
+        );
+    });
 
     // create the main container, which uses the `outline` class, which has
     // a margin visually consistent with other panes
@@ -1273,18 +1291,13 @@ class LoomView extends ItemView {
       cls: `loom-zport${settings.showExport ? "" : " hidden"}`,
     });
 
+    const exportInput = exportDiv.createEl("input", {
+      attr: { type: "text", placeholder: "Path to export to" },
+    });
     const exportButton = exportDiv.createEl("button", {});
     setIcon(exportButton, "download");
     exportButton.addEventListener("click", () =>
-      dialog.showSaveDialog({
-        title: "Export to JSON",
-        filters: [{ extensions: ["json"] }],
-      }).then(
-        (path: string | undefined) => {
-          // if (path) this.app.workspace.trigger("loom:export", path);
-          console.log(path);
-        }
-      )
+      this.app.workspace.trigger("loom:export", exportInput.value)
     );
 
     container.createDiv({ cls: `loom-vspacer${settings.showImport || settings.showExport ? "" : " hidden"}` });
