@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as _ from "lodash";
 import * as fs from "fs";
 const untildify = require("untildify") as any;
+const dialog = require("electron").remote.dialog;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
@@ -1272,13 +1273,17 @@ class LoomView extends ItemView {
       cls: `loom-zport${settings.showExport ? "" : " hidden"}`,
     });
 
-    const exportInput = exportDiv.createEl("input", {
-      attr: { type: "text", placeholder: "Path to export to" },
-    });
     const exportButton = exportDiv.createEl("button", {});
     setIcon(exportButton, "download");
     exportButton.addEventListener("click", () =>
-      this.app.workspace.trigger("loom:export", exportInput.value)
+      dialog.showSaveDialog({
+        title: "Export to JSON",
+        filters: [{ extensions: ["json"] }],
+      }).then(
+        (path: string | undefined) => {
+          if (path) this.app.workspace.trigger("loom:export", path);
+        }
+      )
     );
 
     container.createDiv({ cls: `loom-vspacer${settings.showImport || settings.showExport ? "" : " hidden"}` });
