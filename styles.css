@@ -248,3 +248,11 @@
 .loom-import-button {
   flex-grow: 1;
 }
+
+.theme-dark .loom-before-current-text {
+  color: #808080;
+}
+
+.theme-light .loom-before-current-text {
+  color: #999;
+}

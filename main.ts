@@ -12,14 +12,23 @@ import {
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
+import { Range } from "@codemirror/state";
+import {
+  Decoration,
+  DecorationSet,
+  EditorView,
+  PluginSpec,
+  PluginValue,
+  ViewPlugin,
+  ViewUpdate
+} from "@codemirror/view";
 import * as cohere from "cohere-ai";
+import * as fs from "fs";
 import GPT3Tokenizer from "gpt3-tokenizer";
 import { Configuration, OpenAIApi } from "openai";
 import { v4 as uuidv4 } from "uuid";
-import * as _ from "lodash";
-import * as fs from "fs";
-const untildify = require("untildify") as any;
 const dialog = require("electron").remote.dialog;
+const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
@@ -45,6 +54,10 @@ interface LoomSettings {
   cloneParentOnEdit: boolean;
   showExport: boolean;
 }
+
+type LSStringProperty = keyof {
+  [K in keyof LoomSettings as LoomSettings[K] extends string ? K : never]: LoomSettings[K];
+};
 
 const DEFAULT_SETTINGS: LoomSettings = {
   openaiApiKey: "",
@@ -156,10 +169,11 @@ export default class LoomPlugin extends Plugin {
     };
 
     const openLoomPane = () => {
+      const loomPanes = this.app.workspace.getLeavesOfType("loom");
       try {
-        if (this.app.workspace.getLeavesOfType("loom").length === 0)
+        if (loomPanes.length === 0)
           this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
-        else this.app.workspace.revealLeaf(this.view.leaf);
+        else this.app.workspace.revealLeaf(loomPanes[0]);
       } catch (e) {
         console.error(e);
       }
@@ -311,14 +325,15 @@ export default class LoomPlugin extends Plugin {
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
 
-    this.registerView("loom", (leaf) => {
-      this.view = new LoomView(
-        leaf,
-        () => this.withFile((file) => this.state[file.path]),
-        () => this.settings
-      );
-      return this.view;
-    });
+    const getState = () => this.withFile((file) => this.state[file.path]);
+    const getSettings = () => this.settings;
+
+    this.registerView("loom", (leaf) =>
+      this.view = new LoomView(leaf, getState, getSettings)
+    );
+
+    const loomEditorPlugin = ViewPlugin.fromClass(LoomEditorPlugin, loomEditorPluginSpec);
+    this.registerEditorExtension([loomEditorPlugin]);
 
     openLoomPane();
 
@@ -471,17 +486,31 @@ export default class LoomPlugin extends Plugin {
             this.state[view.file.path].nodes[current].text = text.slice(
               ancestorTexts.join("").length
             );
+
+            // @ts-expect-error
+            const editorView = editor.cm;
+            const plugin = editorView.plugin(loomEditorPlugin);
+            const lines = ancestorTexts.join("").split("\n");
+            plugin.state = {
+              breakLine: lines.length,
+              breakCh: lines.length > 0 ? lines[lines.length - 1].length : 0,
+            };
+            plugin.update();
           });
 
           // restore cursor position
           editor.setCursor(cursor);
+
+          // update `LoomEditorPlugin`'s state with:
+          //   - the text preceding the current node's text
+          //   - the current node's text
         }
       )
     );
 
     this.registerEvent(
       // ignore ts2769; the obsidian-api declarations don't account for custom events
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:switch-to", (id: string) =>
         this.wftsar((file) => {
           this.state[file.path].current = id;
@@ -522,7 +551,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:toggle-collapse", (id: string) =>
         this.wftsar(
           (file) =>
@@ -533,21 +562,21 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:hoist", (id: string) =>
         this.wftsar((file) => this.state[file.path].hoisted.push(id))
       )
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:unhoist", () =>
         this.wftsar((file) => this.state[file.path].hoisted.pop())
       )
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:toggle-bookmark", (id: string) =>
         this.wftsar(
           (file) =>
@@ -558,14 +587,14 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:set-color", (id: string, color: Color) =>
         this.wftsar((file) => (this.state[file.path].nodes[id].color = color))
       )
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:create-child", (id: string) =>
         this.withFile((file) => {
           const newId = uuidv4();
@@ -584,7 +613,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:create-sibling", (id: string) =>
         this.withFile((file) => {
           const newId = uuidv4();
@@ -603,7 +632,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:clone", (id: string) =>
         this.withFile((file) => {
           const newId = uuidv4();
@@ -622,7 +651,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:break-at-point", () =>
         this.withFile((file) => {
           const parentId = this.breakAtPoint();
@@ -644,7 +673,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:delete", (id: string) =>
         this.wftsar((file) => {
           const rootNodes = Object.entries(this.state[file.path].nodes)
@@ -685,7 +714,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:clear-children", (id: string) =>
         this.wftsar((file) => {
           const children = Object.entries(this.state[file.path].nodes).filter(
@@ -698,7 +727,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:clear-siblings", (id: string) =>
         this.wftsar((file) => {
           const parentId = this.state[file.path].nodes[id].parentId;
@@ -712,7 +741,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:set-setting", (setting: string, value: any) =>
         this.thenSaveAndRender(
           () => (this.settings = { ...this.settings, [setting]: value })
@@ -721,7 +750,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:import", (pathName: string) => this.wftsar(
         (file) => {
           if (!pathName) return;
@@ -738,7 +767,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.on("loom:export", (pathName: string) => this.wftsar(
         (file) => {
           if (!pathName) return;
@@ -1246,7 +1275,7 @@ class LoomView extends ItemView {
     })
     setIcon(importNavButton, "import");
     importFileInput.addEventListener("change", () =>
-      // @ts-ignore
+      // @ts-expect-error
       this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
     );
 
@@ -1709,6 +1738,56 @@ class LoomView extends ItemView {
   }
 }
 
+interface LoomEditorPluginState {
+  breakLine: number;
+  breakCh: number;
+}
+
+class LoomEditorPlugin implements PluginValue {
+  decorations: DecorationSet;
+  state: LoomEditorPluginState;
+  view: EditorView;
+
+  constructor(view: EditorView) {
+    this.decorations = Decoration.none;
+    this.state = { breakLine: 0, breakCh: 0 };
+    this.view = view;
+  }
+
+  update(_update: ViewUpdate) {
+    let decorations: Range<Decoration>[] = [];
+
+    const pushNewRange = (start: number, end: number) => {
+      try {
+        const range = Decoration.mark({
+          class: "loom-before-current-text",
+        }).range(start, end);
+        decorations.push(range);
+      } catch (e) { /* errors if the range is empty, just ignore */ }
+    }
+
+    let i = 0;
+    if (this.state.breakLine > 0) {
+      // @ts-expect-error
+      const lines = this.view.state.doc.text;
+
+      for (let j = 0; j < this.state.breakLine - 1; j++) {
+        const end = lines[j].length;
+        pushNewRange(i, i + end);
+        i += lines[j].length + 1;
+      }
+    }
+
+    pushNewRange(i, i + this.state.breakCh);
+
+    this.decorations = Decoration.set(decorations);
+  }
+}
+
+const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
+  decorations: (value: LoomEditorPlugin) => value.decorations,
+};
+
 class LoomSettingTab extends PluginSettingTab {
   plugin: LoomPlugin;
 
@@ -1754,35 +1833,21 @@ class LoomSettingTab extends PluginSettingTab {
       });
     });
 
-    new Setting(containerEl)
-      .setName("Cohere API key")
-      .setDesc("Required if using Cohere")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.cohereApiKey).onChange(async (value) => {
-          this.plugin.settings.cohereApiKey = value;
-          await this.plugin.save();
-        })
-      );
+    const apiKeySetting = (name: string, setting: LSStringProperty) => {
+      new Setting(containerEl)
+        .setName(`${name} API key`)
+        .setDesc(`Required if using ${name}`)
+        .addText((text) =>
+          text.setValue(this.plugin.settings[setting]).onChange(async (value) => {
+            this.plugin.settings[setting] = value;
+            await this.plugin.save();
+          })
+        );
+    };
 
-    new Setting(containerEl)
-      .setName("TextSynth API key")
-      .setDesc("Required if using TextSynth")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.textsynthApiKey).onChange(async (value) => {
-          this.plugin.settings.textsynthApiKey = value;
-          await this.plugin.save();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("OpenAI code-davinci-002 proxy API key")
-      .setDesc("Required if using OCP")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.ocpApiKey).onChange(async (value) => {
-          this.plugin.settings.ocpApiKey = value;
-          await this.plugin.save();
-        })
-      );
+    apiKeySetting("Cohere", "cohereApiKey");
+    apiKeySetting("TextSynth", "textsynthApiKey");
+    apiKeySetting("OpenAI code-davinci-002 proxy", "ocpApiKey");
 
     new Setting(containerEl)
       .setName("OpenAI code-davinci-002 proxy URL")
@@ -1794,15 +1859,9 @@ class LoomSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl)
-      .setName("OpenAI API key")
-      .setDesc("Required if using OpenAI")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.openaiApiKey).onChange(async (value) => {
-          this.plugin.settings.openaiApiKey = value;
-          await this.plugin.save();
-        })
-      );
+    apiKeySetting("OpenAI", "openaiApiKey");
+
+    // TODO: reduce duplication of other settings
 
     new Setting(containerEl).setName("Model").addText((text) =>
       text.setValue(this.plugin.settings.model).onChange(async (value) => {
