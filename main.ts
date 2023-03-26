@@ -1618,7 +1618,8 @@ class LoomView extends ItemView {
       // indicate if the node is generating children
       if (state.generating === id) {
         const generatingDiv = nodeDiv.createDiv({ cls: "loom-node-footer" });
-        setIcon(generatingDiv, "refresh-cw");
+        const generatingIcon = generatingDiv.createDiv({ cls: "rotating" });
+        setIcon(generatingIcon, "loader-2");
         generatingDiv.createEl("span", {
           cls: "loom-node-footer-text",
           text: "Generating...",
