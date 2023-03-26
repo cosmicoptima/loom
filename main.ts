@@ -1274,6 +1274,7 @@ class LoomView extends ItemView {
     const container = this.containerEl.createDiv({ cls: "outline" });
 
     // alternative export
+    // (celeste uses this because a bug in obsidian breaks save dialogs for it)
 
     const exportDiv = container.createDiv({
       cls: `loom-zport${settings.showExport ? "" : " hidden"}`,
