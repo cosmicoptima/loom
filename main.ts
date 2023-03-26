@@ -43,7 +43,6 @@ interface LoomSettings {
 
   showSettings: boolean;
   cloneParentOnEdit: boolean;
-  showImport: boolean;
   showExport: boolean;
 }
 
@@ -64,7 +63,6 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
   showSettings: false,
   cloneParentOnEdit: false,
-  showImport: false,
   showExport: false,
 };
 
@@ -1237,18 +1235,21 @@ class LoomView extends ItemView {
       "copy",
       "Don't allow nodes with children to be edited; clone them instead"
     );
-    settingNavButton(
-      "showImport",
-      settings.showImport,
-      "import",
-      "Import JSON"
+
+    const importFileInput = navButtonsContainer.createEl("input", {
+      cls: "hidden",
+      attr: { type: "file", id: "loom-import" },
+    });
+    const importNavButton = navButtonsContainer.createEl("label", {
+      cls: "clickable-icon nav-action-button",
+      attr: { "aria-label": "Import JSON", for: "loom-import" },
+    })
+    setIcon(importNavButton, "import");
+    importFileInput.addEventListener("change", () =>
+      // @ts-ignore
+      this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
     );
-    // settingNavButton(
-    //   "showExport",
-    //   settings.showExport,
-    //   "download",
-    //   "Export to JSON"
-    // );
+
     const exportNavButton = navButtonsContainer.createDiv({
       cls: `clickable-icon nav-action-button${settings.showExport ? " is-active" : ""}`,
       attr: { "aria-label": "Export to JSON" },
@@ -1272,22 +1273,7 @@ class LoomView extends ItemView {
     // a margin visually consistent with other panes
     const container = this.containerEl.createDiv({ cls: "outline" });
 
-    // import/export
-
-    const importDiv = container.createDiv({
-      cls: `loom-zport${settings.showImport ? "" : " hidden"}`,
-    });
-
-    const importInput = importDiv.createEl("input", {
-      attr: { type: "file", accept: ".json" },
-    });
-    const importButton = importDiv.createEl("button", {});
-    setIcon(importButton, "import");
-    importButton.addEventListener("click", () =>
-      // @ts-ignore
-      this.app.workspace.trigger("loom:import", importInput.files[0].path)
-      // "Property 'path' does not exist on type 'File'" yes it does
-    );
+    // alternative export
 
     const exportDiv = container.createDiv({
       cls: `loom-zport${settings.showExport ? "" : " hidden"}`,
@@ -1302,7 +1288,7 @@ class LoomView extends ItemView {
       this.app.workspace.trigger("loom:export", exportInput.value)
     );
 
-    container.createDiv({ cls: `loom-vspacer${settings.showImport || settings.showExport ? "" : " hidden"}` });
+    container.createDiv({ cls: `loom-vspacer${settings.showExport ? "" : " hidden"}` });
 
     // settings
 
