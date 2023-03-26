@@ -20,7 +20,7 @@ import {
   PluginSpec,
   PluginValue,
   ViewPlugin,
-  ViewUpdate
+  ViewUpdate,
 } from "@codemirror/view";
 import * as cohere from "cohere-ai";
 import * as fs from "fs";
@@ -33,7 +33,7 @@ const untildify = require("untildify") as any;
 const tokenizer = new GPT3Tokenizer({ type: "codex" });
 
 const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat"];
-type Provider = typeof PROVIDERS[number];
+type Provider = (typeof PROVIDERS)[number];
 
 interface LoomSettings {
   openaiApiKey: string;
@@ -56,7 +56,9 @@ interface LoomSettings {
 }
 
 type LSStringProperty = keyof {
-  [K in keyof LoomSettings as LoomSettings[K] extends string ? K : never]: LoomSettings[K];
+  [K in keyof LoomSettings as LoomSettings[K] extends string
+    ? K
+    : never]: LoomSettings[K];
 };
 
 const DEFAULT_SETTINGS: LoomSettings = {
@@ -328,11 +330,15 @@ export default class LoomPlugin extends Plugin {
     const getState = () => this.withFile((file) => this.state[file.path]);
     const getSettings = () => this.settings;
 
-    this.registerView("loom", (leaf) =>
-      this.view = new LoomView(leaf, getState, getSettings)
+    this.registerView(
+      "loom",
+      (leaf) => (this.view = new LoomView(leaf, getState, getSettings))
     );
 
-    const loomEditorPlugin = ViewPlugin.fromClass(LoomEditorPlugin, loomEditorPluginSpec);
+    const loomEditorPlugin = ViewPlugin.fromClass(
+      LoomEditorPlugin,
+      loomEditorPluginSpec
+    );
     this.registerEditorExtension([loomEditorPlugin]);
 
     openLoomPane();
@@ -751,8 +757,8 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:import", (pathName: string) => this.wftsar(
-        (file) => {
+      this.app.workspace.on("loom:import", (pathName: string) =>
+        this.wftsar((file) => {
           if (!pathName) return;
 
           const rawPathName = untildify(pathName);
@@ -762,14 +768,14 @@ export default class LoomPlugin extends Plugin {
           new Notice("Imported from " + rawPathName);
 
           this.app.workspace.trigger("loom:switch-to", data.current);
-        }
-      ))
+        })
+      )
     );
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:export", (pathName: string) => this.wftsar(
-        (file) => {
+      this.app.workspace.on("loom:export", (pathName: string) =>
+        this.wftsar((file) => {
           if (!pathName) return;
 
           const data = this.state[file.path];
@@ -777,8 +783,8 @@ export default class LoomPlugin extends Plugin {
           const rawPathName = untildify(pathName);
           fs.writeFileSync(rawPathName, json);
           new Notice("Exported to " + rawPathName);
-        }
-      ))
+        })
+      )
     );
 
     this.registerEvent(
@@ -924,16 +930,16 @@ export default class LoomPlugin extends Plugin {
     let completions;
     try {
       if (this.settings.provider === "openai-chat") {
-        completions = (await this.openai.createChatCompletion({
-          model: this.settings.model,
-          messages: [
-            { role: "assistant", content: prompt },
-          ],
-          max_tokens: this.settings.maxTokens,
-          n: this.settings.n,
-          temperature: this.settings.temperature,
-          top_p: this.settings.topP,
-        })).data.choices.map((choice) => choice.message?.content);
+        completions = (
+          await this.openai.createChatCompletion({
+            model: this.settings.model,
+            messages: [{ role: "assistant", content: prompt }],
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+            top_p: this.settings.topP,
+          })
+        ).data.choices.map((choice) => choice.message?.content);
       } else if (this.settings.provider === "openai") {
         completions = (
           await this.openai.createCompletion({
@@ -947,16 +953,19 @@ export default class LoomPlugin extends Plugin {
         ).data.choices.map((choice) => choice.text);
       }
     } catch (e) {
-      if (e.response.status === 401 && ["openai", "openai-chat"].includes(this.settings.provider))
+      if (
+        e.response.status === 401 &&
+        ["openai", "openai-chat"].includes(this.settings.provider)
+      )
         new Notice(
           "OpenAI API key is invalid. Please provide a valid key in the settings."
         );
-      else if (e.response.status === 429 && ["openai", "openai-chat"].includes(this.settings.provider))
+      else if (
+        e.response.status === 429 &&
+        ["openai", "openai-chat"].includes(this.settings.provider)
+      )
         new Notice("OpenAI API rate limit exceeded.");
-      else
-        new Notice(
-          "Unknown API error: " + e.response.data.error.message
-        );
+      else new Notice("Unknown API error: " + e.response.data.error.message);
 
       this.statusBarItem.style.display = "none";
       return;
@@ -972,12 +981,16 @@ export default class LoomPlugin extends Plugin {
         p: this.settings.topP,
       });
       if (response.statusCode !== 200) {
-        new Notice("Cohere API responded with status code " + response.statusCode);
+        new Notice(
+          "Cohere API responded with status code " + response.statusCode
+        );
 
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = response.body.generations.map((generation) => generation.text);
+      completions = response.body.generations.map(
+        (generation) => generation.text
+      );
     } else if (this.settings.provider === "textsynth") {
       // TextSynth API doesn't have CORS enabled, so we have to proxy
       const response = await fetch("https://celeste.exposed/api/textsynth", {
@@ -994,26 +1007,28 @@ export default class LoomPlugin extends Plugin {
         }),
       });
       if (response.status !== 200) {
-        new Notice("TextSynth API responded with status code " + response.status);
+        new Notice(
+          "TextSynth API responded with status code " + response.status
+        );
 
         this.statusBarItem.style.display = "none";
         return;
       }
       if (this.settings.n === 1)
         completions = [(await response.json()).response.text];
-      else
-        completions = (await response.json()).response.text;
+      else completions = (await response.json()).response.text;
     } else if (this.settings.provider === "ocp") {
       let url = this.settings.ocpUrl;
 
-      if (!(url.startsWith("http://") || url.startsWith("https://"))) url = "https://" + url;
+      if (!(url.startsWith("http://") || url.startsWith("https://")))
+        url = "https://" + url;
       if (!url.endsWith("/")) url += "/";
       url += "v1/completions";
 
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${this.settings.ocpApiKey}`,
+          Authorization: `Bearer ${this.settings.ocpApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -1030,7 +1045,9 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = (await response.json()).choices.map((choice: any) => choice.text);
+      completions = (await response.json()).choices.map(
+        (choice: any) => choice.text
+      );
     }
 
     if (completions === undefined) {
@@ -1048,8 +1065,8 @@ export default class LoomPlugin extends Plugin {
 
       if (this.settings.provider === "openai-chat")
         if (!trailingSpace) completion = " " + completion;
-      else if (trailingSpace && completion[0] === " ")
-        completion = completion.slice(1);
+        else if (trailingSpace && completion[0] === " ")
+          completion = completion.slice(1);
 
       const id = uuidv4();
       state.nodes[id] = {
@@ -1295,7 +1312,7 @@ class LoomView extends ItemView {
     const importNavButton = navButtonsContainer.createEl("label", {
       cls: "clickable-icon nav-action-button",
       attr: { "aria-label": "Import JSON", for: "loom-import" },
-    })
+    });
     setIcon(importNavButton, "import");
     importFileInput.addEventListener("change", () =>
       // @ts-expect-error
@@ -1303,22 +1320,29 @@ class LoomView extends ItemView {
     );
 
     const exportNavButton = navButtonsContainer.createDiv({
-      cls: `clickable-icon nav-action-button${settings.showExport ? " is-active" : ""}`,
+      cls: `clickable-icon nav-action-button${
+        settings.showExport ? " is-active" : ""
+      }`,
       attr: { "aria-label": "Export to JSON" },
     });
     setIcon(exportNavButton, "download");
     exportNavButton.addEventListener("click", (e) => {
       if (e.shiftKey)
-        this.app.workspace.trigger("loom:set-setting", "showExport", !settings.showExport);
-      else
-        dialog.showSaveDialog({
-          title: "Export to JSON",
-          filters: [{ extensions: ["json"] }],
-        }).then(
-          (result: any) => {
-            if (result) this.app.workspace.trigger("loom:export", result.filePath);
-          }
+        this.app.workspace.trigger(
+          "loom:set-setting",
+          "showExport",
+          !settings.showExport
         );
+      else
+        dialog
+          .showSaveDialog({
+            title: "Export to JSON",
+            filters: [{ extensions: ["json"] }],
+          })
+          .then((result: any) => {
+            if (result)
+              this.app.workspace.trigger("loom:export", result.filePath);
+          });
     });
 
     // create the main container, which uses the `outline` class, which has
@@ -1341,7 +1365,9 @@ class LoomView extends ItemView {
       this.app.workspace.trigger("loom:export", exportInput.value)
     );
 
-    container.createDiv({ cls: `loom-vspacer${settings.showExport ? "" : " hidden"}` });
+    container.createDiv({
+      cls: `loom-vspacer${settings.showExport ? "" : " hidden"}`,
+    });
 
     // settings
 
@@ -1391,7 +1417,11 @@ class LoomView extends ItemView {
       }
     });
     providerSelect.addEventListener("change", () =>
-      this.app.workspace.trigger("loom:set-setting", "provider", providerSelect.value)
+      this.app.workspace.trigger(
+        "loom:set-setting",
+        "provider",
+        providerSelect.value
+      )
     );
     setting(
       "Model",
@@ -1786,8 +1816,10 @@ class LoomEditorPlugin implements PluginValue {
           class: "loom-before-current-text",
         }).range(start, end);
         decorations.push(range);
-      } catch (e) { /* errors if the range is empty, just ignore */ }
-    }
+      } catch (e) {
+        /* errors if the range is empty, just ignore */
+      }
+    };
 
     let i = 0;
     if (this.state.breakLine > 0) {
@@ -1861,10 +1893,12 @@ class LoomSettingTab extends PluginSettingTab {
         .setName(`${name} API key`)
         .setDesc(`Required if using ${name}`)
         .addText((text) =>
-          text.setValue(this.plugin.settings[setting]).onChange(async (value) => {
-            this.plugin.settings[setting] = value;
-            await this.plugin.save();
-          })
+          text
+            .setValue(this.plugin.settings[setting])
+            .onChange(async (value) => {
+              this.plugin.settings[setting] = value;
+              await this.plugin.save();
+            })
         );
     };
 
