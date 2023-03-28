@@ -105,10 +105,14 @@ export default class LoomPlugin extends Plugin {
   state: Record<string, NoteState>;
 
   editor: Editor;
-  view: LoomView;
+  // view: LoomView;
   statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
+
+  view(): LoomView {
+    return this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view)[0] as LoomView;
+  }
 
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
@@ -120,7 +124,7 @@ export default class LoomPlugin extends Plugin {
     callback();
 
     this.save();
-    this.view.render();
+    this.view().render();
   }
 
   wftsar(callback: (file: TFile) => void) {
@@ -332,7 +336,7 @@ export default class LoomPlugin extends Plugin {
 
     this.registerView(
       "loom",
-      (leaf) => (this.view = new LoomView(leaf, getState, getSettings))
+      (leaf) => new LoomView(leaf, getState, getSettings)
     );
 
     const loomEditorPlugin = ViewPlugin.fromClass(
@@ -791,7 +795,7 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
 
-        this.view.render();
+        this.view().render();
 
         this.app.workspace.iterateRootLeaves((leaf) => {
           if (
@@ -840,7 +844,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on("resize", () => this.view.render())
+      this.app.workspace.on("resize", () => this.view().render())
     );
 
     this.registerEvent(
@@ -906,7 +910,7 @@ export default class LoomPlugin extends Plugin {
 
     this.state[file.path].generating = state.current;
     this.save();
-    this.view.render();
+    this.view().render();
 
     let prompt = this.fullText(state.current, state);
 
@@ -1085,7 +1089,7 @@ export default class LoomPlugin extends Plugin {
 
     this.state[file.path].generating = null;
     this.save();
-    this.view.render();
+    this.view().render();
 
     this.statusBarItem.style.display = "none";
   }
