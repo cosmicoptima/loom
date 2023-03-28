@@ -229,6 +229,16 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "loom-merge-with-parent",
+      name: "Merge current node with parent",
+      callback: () =>
+        withState((state) =>
+          this.app.workspace.trigger("loom:merge-with-parent", state.current)
+        ),
+      hotkeys: [{ modifiers: ["Alt"], key: "m" }]
+    });
+
+    this.addCommand({
       id: "loom-switch-to-next-sibling",
       name: "Switch to next sibling",
       icon: "arrow-down",
@@ -681,6 +691,29 @@ export default class LoomPlugin extends Plugin {
         })
       )
     );
+
+    this.registerEvent(
+      // @ts-expect-error
+      this.app.workspace.on("loom:merge-with-parent", (id: string) =>
+        this.wftsar((file) => {
+          const state = this.state[file.path];
+          const parentId = state.nodes[id].parentId;
+
+          if (parentId === null) {
+            new Notice("Can't merge a root node with its parent");
+            return;
+          }
+          if (Object.values(state.nodes).filter((n) => n.parentId === parentId).length > 1) {
+            new Notice("Can't merge this node with its parent; it has siblings");
+            return;
+          }
+
+          state.nodes[parentId].text += state.nodes[id].text;
+          this.app.workspace.trigger("loom:switch-to", parentId);
+          this.app.workspace.trigger("loom:delete", id);
+        }
+      )
+    ));
 
     this.registerEvent(
       // @ts-expect-error
@@ -1644,6 +1677,16 @@ class LoomView extends ItemView {
             this.app.workspace.trigger("loom:clear-siblings", id)
           );
         });
+
+        if (node.parentId) {
+          menu.addSeparator();
+
+          menu.addItem((item) => {
+            item.setTitle("Merge with parent");
+            item.setIcon("arrow-left");
+            item.onClick(() => this.app.workspace.trigger("loom:merge-with-parent", id));
+          });
+        }
 
         if (id !== onlyRootNode) {
           menu.addSeparator();
