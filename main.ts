@@ -1683,7 +1683,7 @@ class LoomView extends ItemView {
 
           menu.addItem((item) => {
             item.setTitle("Merge with parent");
-            item.setIcon("arrow-left");
+            item.setIcon("arrow-up-left");
             item.onClick(() => this.app.workspace.trigger("loom:merge-with-parent", id));
           });
         }
