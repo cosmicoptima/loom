@@ -1100,10 +1100,10 @@ export default class LoomPlugin extends Plugin {
       if (!completion) completion = ""; // empty completions are null, apparently
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
 
-      if (this.settings.provider === "openai-chat")
+      if (this.settings.provider === "openai-chat") {
         if (!trailingSpace) completion = " " + completion;
-        else if (trailingSpace && completion[0] === " ")
-          completion = completion.slice(1);
+      } else if (trailingSpace && completion[0] === " ")
+        completion = completion.slice(1);
 
       const id = uuidv4();
       state.nodes[id] = {
