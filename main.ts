@@ -1871,7 +1871,10 @@ class LoomEditorPlugin implements PluginValue {
     let i = 0;
     if (this.state.breakLine > 0) {
       // @ts-expect-error
-      const lines = this.view.state.doc.text;
+      let lines = this.view.state.doc.text;
+      if (lines === undefined)
+        // @ts-expect-error
+        lines = this.view.state.doc.children.map((c) => c.text).flat();
 
       for (let j = 0; j < this.state.breakLine - 1; j++) {
         const end = lines[j].length;
