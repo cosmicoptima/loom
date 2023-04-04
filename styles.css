@@ -249,10 +249,18 @@
   flex-grow: 1;
 }
 
-.theme-dark .loom-before-current-text {
+.theme-dark .loom-bct {
   color: #808080;
 }
 
-.theme-light .loom-before-current-text {
+.theme-dark .loom-bct-border {
+  border-right: 2px dashed #808080;
+}
+
+.theme-light .loom-bct {
   color: #999;
+}
+
+.theme-dark .loom-bct-hover {
+  background-color: #111;
 }

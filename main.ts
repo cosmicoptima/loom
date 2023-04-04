@@ -21,6 +21,7 @@ import {
   PluginValue,
   ViewPlugin,
   ViewUpdate,
+  WidgetType,
 } from "@codemirror/view";
 import * as cohere from "cohere-ai";
 import * as fs from "fs";
@@ -51,7 +52,7 @@ interface LoomSettings {
   n: number;
 
   showSettings: boolean;
-  cloneParentOnEdit: boolean;
+  showNodeBorders: boolean;
   showExport: boolean;
 }
 
@@ -77,7 +78,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   n: 5,
 
   showSettings: false,
-  cloneParentOnEdit: false,
+  showNodeBorders: false,
   showExport: false,
 };
 
@@ -364,6 +365,10 @@ export default class LoomPlugin extends Plugin {
           // get cursor position, so it can be restored later
           const cursor = editor.getCursor();
 
+          // @ts-expect-error
+          const editorView = editor.cm;
+          const plugin = editorView.plugin(loomEditorPlugin);
+
           this.thenSaveAndRender(() => {
             // if this note has no state, initialize it
             if (!this.state[view.file.path])
@@ -413,61 +418,7 @@ export default class LoomPlugin extends Plugin {
             );
 
             // for each ancestor, check if the editor's text starts with the ancestor's full text
-            // if not, check if cpoe is enabled
-            //   if so, `cloneParent`
-            //   if not, `editNode`
-
-            // `cloneParent`: create a sibling of the ancestor's parent with the new text
-            const cloneParent = (i: number) => {
-              const newPrefix = ancestorTexts.slice(0, i).join("");
-              const followingText = text.substring(newPrefix.length);
-
-              const { children, newText } = (() => {
-                for (let j = familyTexts.length - 1; j >= 0; j--) {
-                  const suffix = familyTexts.slice(j).join("");
-                  if (followingText.endsWith(suffix)) continue;
-
-                  const lastSuffix = familyTexts.slice(j + 1).join("");
-                  return {
-                    children: j + 1,
-                    newText: followingText.substring(
-                      0,
-                      followingText.length - lastSuffix.length
-                    ),
-                  };
-                }
-
-                throw new Error("unreachable"); // TODO
-              })();
-
-              const id = uuidv4();
-              this.state[view.file.path].nodes[id] = {
-                text: newText,
-                parentId: i === 0 ? null : ancestors[i - 1],
-                unread: false,
-                collapsed: false,
-                bookmarked: false,
-                color: null,
-              };
-
-              let parentId = id;
-              for (let j = children; j < familyTexts.length; j++) {
-                const childId = uuidv4();
-                this.state[view.file.path].nodes[childId] = {
-                  text: familyTexts[j],
-                  parentId,
-                  unread: false,
-                  collapsed: false,
-                  bookmarked: false,
-                  color: null,
-                };
-                parentId = childId;
-              }
-
-              this.app.workspace.trigger("loom:switch-to", parentId);
-            };
-
-            // `editNode`: edit the ancestor's text to match the in-range section of the editor's text
+            // if not, edit the ancestor's text to match the in-range section of the editor's text
             const editNode = (i: number) => {
               const prefix = familyTexts.slice(0, i).join("");
               const suffix = familyTexts.slice(i + 1).join("");
@@ -478,44 +429,27 @@ export default class LoomPlugin extends Plugin {
               this.state[view.file.path].nodes[ancestors[i]].text = newText;
             };
 
+            const updateDecorations = () => {
+              const nodeLengths = ancestors.map((id) => [id, this.state[view.file.path].nodes[id].text.length]);
+              plugin.state = { nodeLengths, showNodeBorders: this.settings.showNodeBorders };
+              plugin.update();
+            };
+
             for (let i = 0; i < ancestors.length; i++) {
               const textBefore = ancestorTexts.slice(0, i + 1).join("");
 
               if (!text.startsWith(textBefore)) {
-                if (this.settings.cloneParentOnEdit) cloneParent(i);
-                else editNode(i);
-
+                editNode(i);
+                updateDecorations();
                 return;
               }
-            }
-
-            // if the edited node has children and cpoe is enabled, `cloneParent`
-            const children = Object.values(
-              this.state[view.file.path].nodes
-            ).filter((node) => node.parentId === current);
-            const fullText = familyTexts.join(""); // don't clone parent if the text is the same
-            if (
-              children.length > 0 &&
-              text !== fullText &&
-              this.settings.cloneParentOnEdit
-            ) {
-              cloneParent(ancestors.length);
-              return;
             }
 
             this.state[view.file.path].nodes[current].text = text.slice(
               ancestorTexts.join("").length
             );
 
-            // @ts-expect-error
-            const editorView = editor.cm;
-            const plugin = editorView.plugin(loomEditorPlugin);
-            const lines = ancestorTexts.join("").split("\n");
-            plugin.state = {
-              breakLine: lines.length,
-              breakCh: lines.length > 0 ? lines[lines.length - 1].length : 0,
-            };
-            plugin.update();
+            updateDecorations();
           });
 
           // restore cursor position
@@ -790,11 +724,22 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:set-setting", (setting: string, value: any) =>
+      this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
         this.thenSaveAndRender(
           () => (this.settings = { ...this.settings, [setting]: value })
-        )
-      )
+        );
+
+        if (setting === "showNodeBorders") {
+          // @ts-expect-error
+          const editor = this.editor.cm;
+
+          const plugin = editor.plugin(loomEditorPlugin);
+          plugin.state.showNodeBorders = this.settings.showNodeBorders;
+          plugin.update();
+
+          editor.focus();
+        }
+      })
     );
 
     this.registerEvent(
@@ -860,13 +805,13 @@ export default class LoomPlugin extends Plugin {
           if (node) ancestors.push(node);
         }
         ancestors = ancestors.reverse();
-
         const ancestorTexts = ancestors.map((id) => state.nodes[id].text);
 
-        const lines = ancestorTexts.join("").split("\n");
+        const nodeLengths = ancestors.map((id, i) => [id, ancestorTexts[i].length]);
+
         plugin.state = {
-          breakLine: lines.length - 1,
-          breakCh: lines.length > 0 ? lines[lines.length - 1].length : 0,
+          nodeLengths,
+          showNodeBorders: this.settings.showNodeBorders,
         };
         plugin.update();
       })
@@ -1341,10 +1286,10 @@ class LoomView extends ItemView {
       "Show settings"
     );
     settingNavButton(
-      "cloneParentOnEdit",
-      settings.cloneParentOnEdit,
-      "copy",
-      "Don't allow nodes with children to be edited; clone them instead"
+      "showNodeBorders",
+      settings.showNodeBorders,
+      "separator-vertical",
+      "Show node borders in the editor"
     );
 
     const importFileInput = navButtonsContainer.createEl("input", {
@@ -1844,8 +1789,8 @@ class LoomView extends ItemView {
 }
 
 interface LoomEditorPluginState {
-  breakLine: number;
-  breakCh: number;
+  nodeLengths: [string, number][];
+  showNodeBorders: boolean;
 }
 
 class LoomEditorPlugin implements PluginValue {
@@ -1855,17 +1800,17 @@ class LoomEditorPlugin implements PluginValue {
 
   constructor(view: EditorView) {
     this.decorations = Decoration.none;
-    this.state = { breakLine: 0, breakCh: 0 };
+    this.state = { nodeLengths: [], showNodeBorders: false };
     this.view = view;
   }
 
   update(_update: ViewUpdate) {
     let decorations: Range<Decoration>[] = [];
 
-    const pushNewRange = (start: number, end: number) => {
+    const pushNewRange = (start: number, end: number, id: string) => {
       try {
         const range = Decoration.mark({
-          class: "loom-before-current-text",
+          class: `loom-bct loom-bct-${id}`,
         }).range(start, end);
         decorations.push(range);
       } catch (e) {
@@ -1874,30 +1819,75 @@ class LoomEditorPlugin implements PluginValue {
     };
 
     let i = 0;
-    if (this.state.breakLine > 0) {
-      // @ts-expect-error
-      let lines = this.view.state.doc.text;
-      if (lines === undefined)
-        // @ts-expect-error
-        lines = this.view.state.doc.children.map((c) => c.text).flat();
+    for (const [id, length] of this.state.nodeLengths) {
+      pushNewRange(i, i + length, id);
+      i += length;
 
-      console.log(lines);
-      for (let j = 0; j < this.state.breakLine - 1; j++) {
-        const end = lines[j].length;
-        pushNewRange(i, i + end);
-        i += lines[j].length + 1;
+      if (this.state.showNodeBorders) {
+        const decoration = Decoration.widget({
+          widget: new LoomBorderWidget(),
+          side: -1,
+        }).range(i, i);
+        decorations.push(decoration);
       }
     }
-
-    pushNewRange(i, i + this.state.breakCh);
 
     this.decorations = Decoration.set(decorations);
   }
 }
 
 const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
-  decorations: (value: LoomEditorPlugin) => value.decorations,
+  decorations: (plugin: LoomEditorPlugin) => plugin.decorations,
+  eventHandlers: {
+    mouseover: (event: MouseEvent, _view: EditorView) => {
+      if (event.button !== 0) return false;
+
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains("loom-bct")) return false;
+
+      const className = target.classList[target.classList.length - 1];
+      for (const el of [].slice.call(document.getElementsByClassName(className)))
+        el.classList.add("loom-bct-hover");
+
+      return true;
+    },
+    mouseout: (event: MouseEvent, _view: EditorView) => {
+      if (event.button !== 0) return false;
+
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains("loom-bct")) return false;
+
+      const className = target.classList[target.classList.length - 1];
+      for (const el of [].slice.call(document.getElementsByClassName(className)))
+        el.classList.remove("loom-bct-hover");
+
+      return true;
+    },
+    mousedown: (event: MouseEvent, _view: EditorView) => {
+      if (event.button !== 0 || !event.shiftKey) return false;
+
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains("loom-bct")) return false;
+
+      // the second last element, since the last is `loom-bct-hover`
+      const className = target.classList[target.classList.length - 2];
+      const id = className.split("-").slice(2).join("-");
+      app.workspace.trigger("loom:switch-to", id);
+
+      return true;
+    }
+  },
 };
+
+class LoomBorderWidget extends WidgetType {
+  toDOM() {
+    const el = document.createElement("span");
+    el.classList.add("loom-bct-border");
+    return el;
+  }
+
+  eq() { return true; }
+}
 
 class LoomSettingTab extends PluginSettingTab {
   plugin: LoomPlugin;
