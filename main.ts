@@ -709,6 +709,11 @@ export default class LoomPlugin extends Plugin {
           }
 
           state.nodes[parentId].text += state.nodes[id].text;
+
+          const children = Object.entries(state.nodes).filter(([_, node]) => node.parentId === id);
+          for (const [childId, ] of children)
+            this.state[file.path].nodes[childId].parentId = parentId;
+
           this.app.workspace.trigger("loom:switch-to", parentId);
           this.app.workspace.trigger("loom:delete", id);
         }
@@ -1876,6 +1881,7 @@ class LoomEditorPlugin implements PluginValue {
         // @ts-expect-error
         lines = this.view.state.doc.children.map((c) => c.text).flat();
 
+      console.log(lines);
       for (let j = 0; j < this.state.breakLine - 1; j++) {
         const end = lines[j].length;
         pushNewRange(i, i + end);
