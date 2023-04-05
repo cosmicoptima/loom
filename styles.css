@@ -249,18 +249,14 @@
   flex-grow: 1;
 }
 
-.theme-dark .loom-bct {
-  color: #808080;
+.loom-bct {
+  color: var(--text-muted);
 }
 
 .theme-dark .loom-bct-border {
-  border-right: 2px dashed #808080;
+  border-right: 2px dashed #333;
 }
 
-.theme-light .loom-bct {
-  color: #999;
-}
-
-.theme-dark .loom-bct-hover {
-  background-color: #111;
+.loom-bct-hover {
+  background-color: var(--background-secondary);
 }
