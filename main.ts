@@ -1860,15 +1860,19 @@ class LoomSiblingsView extends ItemView {
       return;
     }
 
-    const siblings = Object.entries(state.nodes).filter(([, node]) => node.parentId === state.nodes[state.current].parentId);
+    const parentId = state.nodes[state.current].parentId;
+    const siblings = Object.entries(state.nodes).filter(([, node]) => node.parentId === parentId);
     for (const i in siblings) {
       const [id, node] = siblings[i];
 
-      const siblingDiv = outline.createEl("div", { cls: "loom-sibling" });
-      siblingDiv.createEl("span", {
-        text: "…",
-        cls: "loom-sibling-ellipsis",
+      const siblingDiv = outline.createEl("div", {
+        cls: `loom-sibling${id === state.current ? " is-active" : ""}`,
       });
+      if (parentId !== null)
+        siblingDiv.createEl("span", {
+          text: "…",
+          cls: "loom-sibling-ellipsis",
+        });
       siblingDiv.createEl("span", { text: node.text.trim() });
       siblingDiv.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
 
