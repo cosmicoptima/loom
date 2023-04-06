@@ -106,13 +106,14 @@ export default class LoomPlugin extends Plugin {
   state: Record<string, NoteState>;
 
   editor: Editor;
-  // view: LoomView;
   statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
 
   view(): LoomView {
-    return this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view)[0] as LoomView;
+    return this.app.workspace
+      .getLeavesOfType("loom")
+      .map((leaf) => leaf.view)[0] as LoomView;
   }
 
   withFile<T>(callback: (file: TFile) => T): T | null {
@@ -236,7 +237,7 @@ export default class LoomPlugin extends Plugin {
         withState((state) =>
           this.app.workspace.trigger("loom:merge-with-parent", state.current)
         ),
-      hotkeys: [{ modifiers: ["Alt"], key: "m" }]
+      hotkeys: [{ modifiers: ["Alt"], key: "m" }],
     });
 
     this.addCommand({
@@ -430,8 +431,14 @@ export default class LoomPlugin extends Plugin {
             };
 
             const updateDecorations = () => {
-              const nodeLengths = ancestors.map((id) => [id, this.state[view.file.path].nodes[id].text.length]);
-              plugin.state = { nodeLengths, showNodeBorders: this.settings.showNodeBorders };
+              const nodeLengths = ancestors.map((id) => [
+                id,
+                this.state[view.file.path].nodes[id].text.length,
+              ]);
+              plugin.state = {
+                nodeLengths,
+                showNodeBorders: this.settings.showNodeBorders,
+              };
               plugin.update();
             };
 
@@ -637,22 +644,29 @@ export default class LoomPlugin extends Plugin {
             new Notice("Can't merge a root node with its parent");
             return;
           }
-          if (Object.values(state.nodes).filter((n) => n.parentId === parentId).length > 1) {
-            new Notice("Can't merge this node with its parent; it has siblings");
+          if (
+            Object.values(state.nodes).filter((n) => n.parentId === parentId)
+              .length > 1
+          ) {
+            new Notice(
+              "Can't merge this node with its parent; it has siblings"
+            );
             return;
           }
 
           state.nodes[parentId].text += state.nodes[id].text;
 
-          const children = Object.entries(state.nodes).filter(([_, node]) => node.parentId === id);
-          for (const [childId, ] of children)
+          const children = Object.entries(state.nodes).filter(
+            ([_, node]) => node.parentId === id
+          );
+          for (const [childId] of children)
             this.state[file.path].nodes[childId].parentId = parentId;
 
           this.app.workspace.trigger("loom:switch-to", parentId);
           this.app.workspace.trigger("loom:delete", id);
-        }
+        })
       )
-    ));
+    );
 
     this.registerEvent(
       // @ts-expect-error
@@ -723,23 +737,26 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
+      this.app.workspace.on(
       // @ts-expect-error
-      this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
-        this.thenSaveAndRender(
-          () => (this.settings = { ...this.settings, [setting]: value })
-        );
+        "loom:set-setting",
+        (setting: string, value: any) => {
+          this.thenSaveAndRender(
+            () => (this.settings = { ...this.settings, [setting]: value })
+          );
 
-        if (setting === "showNodeBorders") {
-          // @ts-expect-error
-          const editor = this.editor.cm;
+          if (setting === "showNodeBorders") {
+            // @ts-expect-error
+            const editor = this.editor.cm;
 
-          const plugin = editor.plugin(loomEditorPlugin);
-          plugin.state.showNodeBorders = this.settings.showNodeBorders;
-          plugin.update();
+            const plugin = editor.plugin(loomEditorPlugin);
+            plugin.state.showNodeBorders = this.settings.showNodeBorders;
+            plugin.update();
 
-          editor.focus();
+            editor.focus();
+          }
         }
-      })
+      )
     );
 
     this.registerEvent(
@@ -807,7 +824,10 @@ export default class LoomPlugin extends Plugin {
         ancestors = ancestors.reverse();
         const ancestorTexts = ancestors.map((id) => state.nodes[id].text);
 
-        const nodeLengths = ancestors.map((id, i) => [id, ancestorTexts[i].length]);
+        const nodeLengths = ancestors.map((id, i) => [
+          id,
+          ancestorTexts[i].length,
+        ]);
 
         plugin.state = {
           nodeLengths,
@@ -1634,7 +1654,9 @@ class LoomView extends ItemView {
           menu.addItem((item) => {
             item.setTitle("Merge with parent");
             item.setIcon("arrow-up-left");
-            item.onClick(() => this.app.workspace.trigger("loom:merge-with-parent", id));
+            item.onClick(() =>
+              this.app.workspace.trigger("loom:merge-with-parent", id)
+            );
           });
         }
 
@@ -1846,7 +1868,9 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       if (!target.classList.contains("loom-bct")) return false;
 
       const className = target.classList[target.classList.length - 1];
-      for (const el of [].slice.call(document.getElementsByClassName(className)))
+      for (const el of [].slice.call(
+        document.getElementsByClassName(className)
+      ))
         el.classList.add("loom-bct-hover");
 
       return true;
@@ -1858,7 +1882,9 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       if (!target.classList.contains("loom-bct")) return false;
 
       const className = target.classList[target.classList.length - 1];
-      for (const el of [].slice.call(document.getElementsByClassName(className)))
+      for (const el of [].slice.call(
+        document.getElementsByClassName(className)
+      ))
         el.classList.remove("loom-bct-hover");
 
       return true;
@@ -1875,7 +1901,7 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       app.workspace.trigger("loom:switch-to", id);
 
       return true;
-    }
+    },
   },
 };
 
@@ -1886,7 +1912,9 @@ class LoomBorderWidget extends WidgetType {
     return el;
   }
 
-  eq() { return true; }
+  eq() {
+    return true;
+  }
 }
 
 class LoomSettingTab extends PluginSettingTab {
