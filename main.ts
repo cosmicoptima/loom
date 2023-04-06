@@ -1299,7 +1299,7 @@ class LoomView extends ItemView {
     const settings = this.getSettings();
 
     // get scroll position, which will be restored at the end
-    const scroll = (this.containerEl as HTMLElement).scrollTop;
+    const scroll = this.containerEl.scrollTop;
 
     this.containerEl.empty();
     this.containerEl.addClass("loom");
@@ -1847,8 +1847,11 @@ class LoomSiblingsView extends ItemView {
   }
 
   render() {
+    const scroll = this.containerEl.scrollTop;
+
     this.containerEl.empty();
-    const outline = this.containerEl.createDiv({ cls: "loom outline" });
+    this.containerEl.addClass("loom");
+    const outline = this.containerEl.createDiv({ cls: "outline" });
     
     const state = this.getNoteState();
 
@@ -1879,6 +1882,8 @@ class LoomSiblingsView extends ItemView {
       if (parseInt(i) !== siblings.length - 1)
         outline.createEl("hr", { cls: "loom-sibling-divider" });
     }
+
+    this.containerEl.scrollTop = scroll;
   }
 
   getViewType(): string {
