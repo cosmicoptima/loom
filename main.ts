@@ -1864,10 +1864,12 @@ class LoomSiblingsView extends ItemView {
     for (const i in siblings) {
       const [id, node] = siblings[i];
 
-      const siblingDiv = outline.createEl("div", {
-        text: node.text,
-        cls: "loom-sibling",
+      const siblingDiv = outline.createEl("div", { cls: "loom-sibling" });
+      siblingDiv.createEl("span", {
+        text: "…",
+        cls: "loom-sibling-ellipsis",
       });
+      siblingDiv.createEl("span", { text: node.text.trim() });
       siblingDiv.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
 
       if (parseInt(i) !== siblings.length - 1)

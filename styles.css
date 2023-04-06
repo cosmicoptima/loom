@@ -281,3 +281,8 @@
 .loom-sibling-divider {
   margin: 1.2em 0;
 }
+
+.loom-sibling-ellipsis {
+  color: var(--text-faint);
+  margin-right: 0.3em;
+}
