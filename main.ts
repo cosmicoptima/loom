@@ -116,6 +116,12 @@ export default class LoomPlugin extends Plugin {
       .map((leaf) => leaf.view)[0] as LoomView;
   }
 
+  siblingsView(): LoomSiblingsView {
+    return this.app.workspace
+      .getLeavesOfType("loom-siblings")
+      .map((leaf) => leaf.view)[0] as LoomSiblingsView;
+  }
+
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
     if (!file) return null;
@@ -127,6 +133,7 @@ export default class LoomPlugin extends Plugin {
 
     this.save();
     this.view().render();
+    this.siblingsView().render();
   }
 
   wftsar(callback: (file: TFile) => void) {
@@ -176,12 +183,23 @@ export default class LoomPlugin extends Plugin {
       });
     };
 
-    const openLoomPane = () => {
+    const openLoomPane = (focus: boolean) => {
       const loomPanes = this.app.workspace.getLeavesOfType("loom");
       try {
         if (loomPanes.length === 0)
           this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
-        else this.app.workspace.revealLeaf(loomPanes[0]);
+        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const openLoomSiblingsPane = (focus: boolean) => {
+      const loomPanes = this.app.workspace.getLeavesOfType("loom-siblings");
+      try {
+        if (loomPanes.length === 0)
+          this.app.workspace.getRightLeaf(false).setViewState({ type: "loom-siblings" });
+        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
       } catch (e) {
         console.error(e);
       }
@@ -334,7 +352,7 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "loom-open-pane",
       name: "Open Loom pane",
-      callback: openLoomPane,
+      callback: () => openLoomPane(true),
     });
 
     this.addCommand({
@@ -351,13 +369,19 @@ export default class LoomPlugin extends Plugin {
       (leaf) => new LoomView(leaf, getState, getSettings)
     );
 
+    this.registerView(
+      "loom-siblings",
+      (leaf) => new LoomSiblingsView(leaf, getState)
+    );
+
     const loomEditorPlugin = ViewPlugin.fromClass(
       LoomEditorPlugin,
       loomEditorPluginSpec
     );
     this.registerEditorExtension([loomEditorPlugin]);
 
-    openLoomPane();
+    openLoomPane(true);
+    openLoomSiblingsPane(false);
 
     this.registerEvent(
       this.app.workspace.on(
@@ -796,6 +820,7 @@ export default class LoomPlugin extends Plugin {
         if (!file) return;
 
         this.view().render();
+        this.siblingsView().render();
 
         this.app.workspace.iterateRootLeaves((leaf) => {
           if (
@@ -847,7 +872,7 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on("resize", () => this.view().render())
+      this.app.workspace.on("resize", () => { this.view().render(); this.siblingsView().render(); })
     );
 
     this.registerEvent(
@@ -914,6 +939,7 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].generating = state.current;
     this.save();
     this.view().render();
+    this.siblingsView().render();
 
     let prompt = this.fullText(state.current, state);
 
@@ -1093,6 +1119,7 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].generating = null;
     this.save();
     this.view().render();
+    this.siblingsView().render();
 
     this.statusBarItem.style.display = "none";
   }
@@ -1807,6 +1834,57 @@ class LoomView extends ItemView {
 
   getIcon(): string {
     return "network";
+  }
+}
+
+class LoomSiblingsView extends ItemView {
+  getNoteState: () => NoteState | null;
+
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null) {
+    super(leaf);
+    this.getNoteState = getNoteState;
+    this.render();
+  }
+
+  render() {
+    this.containerEl.empty();
+    const outline = this.containerEl.createDiv({ cls: "loom outline" });
+    
+    const state = this.getNoteState();
+
+    if (!state) {
+      outline.createEl("div", {
+        text: "No note selected.",
+        cls: "pane-empty",
+      });
+      return;
+    }
+
+    const siblings = Object.entries(state.nodes).filter(([, node]) => node.parentId === state.nodes[state.current].parentId);
+    for (const i in siblings) {
+      const [id, node] = siblings[i];
+
+      const siblingDiv = outline.createEl("div", {
+        text: node.text,
+        cls: "loom-sibling",
+      });
+      siblingDiv.addEventListener("click", () => this.app.workspace.trigger("loom:switch-to", id));
+
+      if (parseInt(i) !== siblings.length - 1)
+        outline.createEl("hr", { cls: "loom-sibling-divider" });
+    }
+  }
+
+  getViewType(): string {
+    return "loom-siblings";
+  }
+
+  getDisplayText(): string {
+    return "Siblings";
+  }
+
+  getIcon(): string {
+    return "layout-list";
   }
 }
 

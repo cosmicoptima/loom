@@ -264,3 +264,20 @@
 .theme-dark .loom-bct-hover {
   background-color: #111;
 }
+
+.loom-sibling {
+  color: var(--nav-item-color);
+
+  line-height: 1.3;
+  white-space: pre-wrap;
+
+  cursor: pointer;
+}
+
+.loom-sibling:hover {
+  color: var(--nav-item-color-active);
+}
+
+.loom-sibling-divider {
+  margin: 1.2em 0;
+}
