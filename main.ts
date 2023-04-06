@@ -1532,9 +1532,9 @@ class LoomView extends ItemView {
       if (node.unread) itemDiv.createDiv({ cls: "loom-node-unread-indicator" });
 
       // the node's text
-      const nodeText = itemDiv.createEl(node.text ? "span" : "em", {
+      const nodeText = itemDiv.createEl(node.text.trim() ? "span" : "em", {
         cls: "loom-node-inner tree-item-inner",
-        text: node.text || "No text",
+        text: node.text.trim() || "No text",
       });
       nodeText.addEventListener("click", () =>
         this.app.workspace.trigger("loom:switch-to", id)
