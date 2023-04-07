@@ -12,7 +12,6 @@ Default hotkeys:
 - `Alt+n` - create sibling
 - `Ctrl+Alt+c` - clone current node
 - `Alt+c` - split in-range node at caret
-
 - `Alt+Backspace` - delete current node
 - `Alt+Down` - switch to next sibling
 - `Alt+Up` - switch to previous sibling
