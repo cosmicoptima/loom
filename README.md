@@ -4,7 +4,7 @@ This is a reimplementation of [Loom](https://github.com/socketteer/loom) as an O
 
 Loom is a recursively branching interface to GPT-3 and other language models; it is designed to be conducive to exploratory and experimental use of base models. The workflow primarily consists of this: you hit `Ctrl+Space` from a point in the text, and Loom generates `n` child nodes of the current node, where each child contains a different completion of the text leading up to the cursor. This is paired with a tree interface and settings panel in the right sidebar, as well as a pane containing the full text of the current node and its siblings.
 
-If you are interested in funding development of Loom(sidian), you can [support me on Patreon](https://patreon.com/parafactual); I would then be able to devote more time to this and other independent projects.
+If you are interested in funding development of Loom(sidian), you can **[support me on Patreon](https://patreon.com/parafactual)**; I would then be able to devote more time to this and other independent projects.
 
 **If you are new to Obsidian:** if you want to see the tree interface, make sure to open the right sidebar using the button on the top right, or using `Ctrl+P` then `Toggle right sidebar`. Once you've done that, go to the Loom tab, which is signified by a network icon.
 
