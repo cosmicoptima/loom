@@ -1865,6 +1865,8 @@ class LoomSiblingsView extends ItemView {
 
     const parentId = state.nodes[state.current].parentId;
     const siblings = Object.entries(state.nodes).filter(([, node]) => node.parentId === parentId);
+    
+    let currentDiv;
     for (const i in siblings) {
       const [id, node] = siblings[i];
 
@@ -1881,9 +1883,17 @@ class LoomSiblingsView extends ItemView {
 
       if (parseInt(i) !== siblings.length - 1)
         outline.createEl("hr", { cls: "loom-sibling-divider" });
+
+      if (id === state.current) currentDiv = siblingDiv;
     }
 
     this.containerEl.scrollTop = scroll;
+
+    if (currentDiv) {
+      const rect = currentDiv.getBoundingClientRect();
+      if (rect.top < 25 || rect.bottom > this.containerEl.clientHeight)
+        currentDiv.scrollIntoView();
+    }
   }
 
   getViewType(): string {
