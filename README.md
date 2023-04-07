@@ -6,13 +6,16 @@ Loom is a recursively branching interface to GPT-3 and other language models; it
 
 **If you are new to Obsidian:** if you want to see the tree interface, make sure to open the right sidebar using the button on the top right, or using `Ctrl+P` then `Toggle right sidebar`. Once you've done that, go to the Loom tab, which is signified by a network icon.
 
-Default hotkeys:
+**Default hotkeys:**
+
 - `Ctrl+Space` - complete
 - `Ctrl+Alt+n` - create child
 - `Alt+n` - create sibling
 - `Ctrl+Alt+c` - clone current node
 - `Alt+c` - split in-range node at caret
 - `Alt+Backspace` - delete current node
+
+Navigation:
 - `Alt+Down` - switch to next sibling
 - `Alt+Up` - switch to previous sibling
 - `Alt+Left` - switch to parent
