@@ -39,7 +39,7 @@ Alternatively, you can build from source, which makes it easy to update:
 1. Clone this repository (`git clone https://github.com/cosmicoptima/loom`) in `[path to vault]/.obsidian/plugins`
 2. Run the following: `cd loom; npm i; npm run build`
 3. Go to the "Community plugins" tab in Obsidian settings, then enable "Loom"
-4. To update, go to the repository and `git pull`, then disable and re-enable Loom
+4. To update, go to the repository and `git pull; npm i; npm run build`, then disable and re-enable Loom
 
 **If you are using MacOS:** a few hotkeys -- `Alt+n`, `Alt+c` and `Alt+e` -- are bound to special characters. You can either:
 
