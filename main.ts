@@ -808,8 +808,17 @@ export default class LoomPlugin extends Plugin {
             (id_) => id_ !== id
           );
 
-          let fallback = this.nextSibling(id, this.state[file.path]);
-          if (!fallback) fallback = this.state[file.path].nodes[id].parentId;
+		  let fallback
+		  const siblings = Object.entries(this.state[file.path].nodes).filter(
+			([_id, node]) => node.parentId === this.state[file.path].nodes[id].parentId && id !== _id
+		  );
+		  const byLastVisited = siblings.sort(([_, a], [__, b]) => {
+			if (a.lastVisited === undefined) return 1;
+			if (b.lastVisited === undefined) return -1;
+			return b.lastVisited - a.lastVisited;
+		  });
+		  if (byLastVisited.length > 0) fallback = byLastVisited[0][0];
+		  else fallback = this.state[file.path].nodes[id].parentId;
 
           let deleted = [id];
 
