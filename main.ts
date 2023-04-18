@@ -1048,7 +1048,9 @@ export default class LoomPlugin extends Plugin {
     prompt = prompt.replace(/\s+$/, "");
 
     // replace "\<" with "<", because obsidian tries to render html tags
+	// and "\[" with "["
     prompt = prompt.replace(/\\</g, "<");
+	prompt = prompt.replace(/\\\[/g, "[");
 
     // trim to last 8000 tokens, the maximum allowed by openai
     const bpe = tokenizer.encode(prompt).bpe;
@@ -1194,6 +1196,7 @@ export default class LoomPlugin extends Plugin {
     for (let completion of completions) {
       if (!completion) completion = ""; // empty completions are null, apparently
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
+	  completion = completion.replace(/\[/g, "\\["); // escape [ for obsidian
 
       if (this.settings.provider === "openai-chat") {
         if (!trailingSpace) completion = " " + completion;
