@@ -117,24 +117,22 @@ export default class LoomPlugin extends Plugin {
     return callback(file);
   }
 
-  view() {
-    return this.app.workspace
-      .getLeavesOfType("loom")
-      .map((leaf) => leaf.view)[0] as LoomView;
+  renderViews() {
+	const views = this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view) as LoomView[];
+	views.forEach((view) => view.render());
   }
 
-  siblingsView() {
-    return this.app.workspace
-      .getLeavesOfType("loom-siblings")
-      .map((leaf) => leaf.view)[0] as LoomSiblingsView;
+  renderSiblingsViews() {
+	const views = this.app.workspace.getLeavesOfType("loom-siblings").map((leaf) => leaf.view) as LoomSiblingsView[];
+	views.forEach((view) => view.render());
   }
 
   thenSaveAndRender(callback: () => void) {
     callback();
 
     this.save();
-    this.view().render();
-    this.siblingsView().render();
+    this.renderViews();
+    this.renderSiblingsViews();
   }
 
   wftsar(callback: (file: TFile) => void) {
@@ -928,8 +926,8 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
 
-        this.view().render();
-        this.siblingsView().render();
+        this.renderViews();
+        this.renderSiblingsViews();
 
         this.app.workspace.iterateRootLeaves((leaf) => {
           if (
@@ -982,8 +980,8 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("resize", () => {
-        this.view().render();
-        this.siblingsView().render();
+        this.renderViews();
+        this.renderSiblingsViews();
       })
     );
 
@@ -1046,8 +1044,8 @@ export default class LoomPlugin extends Plugin {
 
     this.state[file.path].generating = state.current;
     this.save();
-    this.view().render();
-    this.siblingsView().render();
+    this.renderViews();
+    this.renderSiblingsViews();
 
     let prompt = this.fullText(state.current, state);
 
@@ -1229,8 +1227,8 @@ export default class LoomPlugin extends Plugin {
 
     this.state[file.path].generating = null;
     this.save();
-    this.view().render();
-    this.siblingsView().render();
+    this.renderViews();
+    this.renderSiblingsViews();
 
     this.statusBarItem.style.display = "none";
   }
