@@ -1621,7 +1621,7 @@ class LoomView extends ItemView {
       node: Node,
       id: string,
       container: HTMLElement,
-      children: boolean
+      main: boolean
     ) => {
       // div for the node and its children
       const nodeDiv = container.createDiv({});
@@ -1633,13 +1633,13 @@ class LoomView extends ItemView {
         }${id === state.current ? " is-active" : ""}${
           node.color ? ` loom-node-${node.color}` : ""
         }`,
-        attr: { id: `loom-node-${id}` },
+        attr: main ? { id: `loom-node-${id}` } : {},
       });
 
       // an expand/collapse button if the node has children
       const hasChildren =
         nodes.filter(([, node]) => node.parentId === id).length > 0;
-      if (children && hasChildren) {
+      if (main && hasChildren) {
         const collapseDiv = itemDiv.createDiv({
           cls: `collapse-icon loom-collapse${
             node.collapsed ? " is-collapsed" : ""
@@ -1833,7 +1833,7 @@ class LoomView extends ItemView {
         );
 
       // indicate if the node is generating children
-      if (state.generating === id) {
+      if (state.generating === id && main) {
         const generatingDiv = nodeDiv.createDiv({ cls: "loom-node-footer" });
         const generatingIcon = generatingDiv.createDiv({ cls: "rotating" });
         setIcon(generatingIcon, "loader-2");
@@ -1844,7 +1844,7 @@ class LoomView extends ItemView {
       }
 
       // render children if the node is not collapsed
-      if (children && !node.collapsed) {
+      if (main && !node.collapsed) {
         const hasChildren =
           nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
