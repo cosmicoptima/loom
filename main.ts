@@ -1206,7 +1206,7 @@ export default class LoomPlugin extends Plugin {
       const id = uuidv4();
       state.nodes[id] = {
         text: completion,
-        parentId: state.current,
+        parentId: state.generating,
         unread: true,
         collapsed: false,
         bookmarked: false,
