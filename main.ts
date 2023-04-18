@@ -10,6 +10,7 @@ import {
   Setting,
   TFile,
   WorkspaceLeaf,
+  requestUrl,
   setIcon,
 } from "obsidian";
 import { Range } from "@codemirror/state";
@@ -110,22 +111,25 @@ export default class LoomPlugin extends Plugin {
 
   openai: OpenAIApi;
 
-  view(): LoomView {
-    return this.app.workspace
-      .getLeavesOfType("loom")
-      .map((leaf) => leaf.view)[0] as LoomView;
-  }
-
-  siblingsView(): LoomSiblingsView {
-    return this.app.workspace
-      .getLeavesOfType("loom-siblings")
-      .map((leaf) => leaf.view)[0] as LoomSiblingsView;
-  }
-
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
     if (!file) return null;
     return callback(file);
+  }
+
+  view() {
+	// return this.app.workspace.getActiveViewOfType(LoomView) as LoomView;
+	return this.app.workspace
+      .getLeavesOfType("loom")
+      .map((leaf) => leaf.view)[0] as LoomView;
+
+  }
+
+  siblingsView() {
+	// return this.app.workspace.getActiveViewOfType(LoomSiblingsView) as LoomSiblingsView;
+	return this.app.workspace
+      .getLeavesOfType("loom-siblings")
+      .map((leaf) => leaf.view)[0] as LoomSiblingsView;
   }
 
   thenSaveAndRender(callback: () => void) {
@@ -167,7 +171,7 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.style.display = "none";
 
     this.addCommand({
-      id: "loom-complete",
+      id: "complete",
       name: "Complete from current point",
       icon: "wand",
       callback: async () => this.complete(),
@@ -206,7 +210,7 @@ export default class LoomPlugin extends Plugin {
     };
 
     this.addCommand({
-      id: "loom-create-child",
+      id: "create-child",
       name: "Create child of current node",
       icon: "plus",
       callback: () =>
@@ -217,7 +221,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-create-sibling",
+      id: "create-sibling",
       name: "Create sibling of current node",
       icon: "list-plus",
       callback: () =>
@@ -228,7 +232,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-clone-current-node",
+      id: "clone-current-node",
       name: "Clone current node",
       icon: "copy",
       callback: () =>
@@ -239,7 +243,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-break-at-point",
+      id: "break-at-point",
       name: "Branch from current point",
       callback: () =>
         withState((state) =>
@@ -249,7 +253,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-merge-with-parent",
+      id: "merge-with-parent",
       name: "Merge current node with parent",
       callback: () =>
         withState((state) =>
@@ -259,7 +263,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-next-sibling",
+      id: "switch-to-next-sibling",
       name: "Switch to next sibling",
       icon: "arrow-down",
       callback: () =>
@@ -272,7 +276,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-previous-sibling",
+      id: "switch-to-previous-sibling",
       name: "Switch to previous sibling",
       icon: "arrow-up",
       callback: () =>
@@ -285,7 +289,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-parent",
+      id: "switch-to-parent",
       name: "Switch to parent",
       icon: "arrow-left",
       callback: () =>
@@ -297,7 +301,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-child",
+      id: "switch-to-child",
       name: "Switch to child",
       icon: "arrow-right",
       callback: () =>
@@ -310,7 +314,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-delete-current-node",
+      id: "delete-current-node",
       name: "Delete current node",
       icon: "trash",
       callback: () =>
@@ -321,7 +325,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-clear-children",
+      id: "clear-children",
       name: "Delete current node's children",
       callback: () =>
         withState((state) =>
@@ -330,7 +334,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-clear-siblings",
+      id: "clear-siblings",
       name: "Delete current node's siblings",
       callback: () =>
         withState((state) =>
@@ -339,7 +343,7 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-toggle-collapse-current-node",
+      id: "toggle-collapse-current-node",
       name: "Toggle whether current node is collapsed",
       icon: "folder-up",
       callback: () =>
@@ -350,13 +354,13 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-open-pane",
+      id: "open-pane",
       name: "Open Loom pane",
       callback: () => openLoomPane(true),
     });
 
     this.addCommand({
-      id: "loom-debug-reset-state",
+      id: "debug-reset-state",
       name: "Debug: Reset state",
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
@@ -872,7 +876,10 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on("resize", () => { this.view().render(); this.siblingsView().render(); })
+      this.app.workspace.on("resize", () => {
+		this.view().render();
+		this.siblingsView().render();
+	  })
     );
 
     this.registerEvent(
@@ -1025,20 +1032,18 @@ export default class LoomPlugin extends Plugin {
         (generation) => generation.text
       );
     } else if (this.settings.provider === "textsynth") {
-      // TextSynth API doesn't have CORS enabled, so we have to proxy
-      const response = await fetch("https://celeste.exposed/api/textsynth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: this.settings.textsynthApiKey,
-          model: this.settings.model,
-          prompt,
-          max_tokens: this.settings.maxTokens,
-          n: this.settings.n,
-          temperature: this.settings.temperature,
-          top_p: this.settings.topP,
-        }),
-      });
+	  const response = await requestUrl({
+        url: `https://api.textsynth.com/v1/engines/${this.settings.model}/completions`,
+		method: "POST",
+		headers: { "Content-Type": "application/json", "Authorization": `Bearer ${this.settings.textsynthApiKey}` },
+		body: JSON.stringify({
+		  prompt,
+		  max_tokens: this.settings.maxTokens,
+		  n: this.settings.n,
+		  temperature: this.settings.temperature,
+		  top_p: this.settings.topP,
+		}),
+	  });
       if (response.status !== 200) {
         new Notice(
           "TextSynth API responded with status code " + response.status
@@ -1048,8 +1053,8 @@ export default class LoomPlugin extends Plugin {
         return;
       }
       if (this.settings.n === 1)
-        completions = [(await response.json()).response.text];
-      else completions = (await response.json()).response.text;
+        completions = [response.json.text];
+      else completions = response.json.text;
     } else if (this.settings.provider === "ocp") {
       let url = this.settings.ocpUrl;
 
@@ -1119,7 +1124,7 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].generating = null;
     this.save();
     this.view().render();
-    this.siblingsView().render();
+	this.siblingsView().render();
 
     this.statusBarItem.style.display = "none";
   }
