@@ -172,6 +172,7 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
+		if (file.extension !== "md") return false;
 
         // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
         if (
@@ -201,6 +202,7 @@ export default class LoomPlugin extends Plugin {
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
       if (!state) this.initializeFile(file);
@@ -216,6 +218,7 @@ export default class LoomPlugin extends Plugin {
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
       if (!state) this.initializeFile(file);
@@ -925,6 +928,7 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
+		if (file.extension !== "md") return;
 
         this.renderViews();
         this.renderSiblingsViews();
