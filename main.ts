@@ -1171,7 +1171,8 @@ export default class LoomPlugin extends Plugin {
 	  url = url.replace(/v1\//, "");
       url += "v1/completions";
 
-      const response = await fetch(url, {
+      const response = await requestUrl({
+		url,
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.settings.ocpApiKey}`,
@@ -1191,7 +1192,7 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = (await response.json()).choices.map(
+      completions = response.json.choices.map(
         (choice: any) => choice.text
       );
     }
