@@ -1164,6 +1164,7 @@ export default class LoomPlugin extends Plugin {
       if (!(url.startsWith("http://") || url.startsWith("https://")))
         url = "https://" + url;
       if (!url.endsWith("/")) url += "/";
+	  url = url.replace(/v1\//, "");
       url += "v1/completions";
 
       const response = await fetch(url, {
