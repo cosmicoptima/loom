@@ -33,12 +33,12 @@ In the editor:
 
 1. Go to the latest release under the "Releases" subheading on the right
 2. Download the zip file under "Assets"
-3. Unzip the file you downloaded in `[path to vault]/.obsidian/plugins`
+3. Unzip the file you downloaded in `[path to vault]/.obsidian/plugins`, creating the `plugins` directory if necessary
 4. Go to the "Community plugins" tab in Obsidian settings, then enable "Loom"
 
 Alternatively, you can build from source, which makes it easy to update:
 
-1. Clone this repository (`git clone https://github.com/cosmicoptima/loom`) in `[path to vault]/.obsidian/plugins`
+1. Clone this repository (`git clone https://github.com/cosmicoptima/loom`) in `[path to vault]/.obsidian/plugins`, creating the `plugins` directory if necessary
 2. Run the following: `cd loom; npm i; npm run build`
 3. Go to the "Community plugins" tab in Obsidian settings, then enable "Loom"
 4. To update, go to the repository and `git pull; npm i; npm run build`, then disable and re-enable Loom
