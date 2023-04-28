@@ -1260,7 +1260,6 @@ export default class LoomPlugin extends Plugin {
   async canvasComplete(file: TFile) {
 	// @ts-expect-error
 	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
-	console.log(canvas);
 	
     const onlySetMember = (set: Set<unknown>) => {
       if (set.size !== 1) {
@@ -1275,7 +1274,7 @@ export default class LoomPlugin extends Plugin {
 	  let currentNode = canvas.edgeTo.data.get(node);
 	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
 	  while (currentNode) {
-		text = currentNode.text + " " + text;
+		text = currentNode.text + text;
 		currentNode = canvas.edgeTo.data.get(currentNode);
 		if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
 	  }
@@ -1283,12 +1282,12 @@ export default class LoomPlugin extends Plugin {
 	  const completions = await this.complete(text);
 	  if (!completions) return;
 
-	  const offset = 62.5 * (completions.length - 1);
+	  let childNodes: any[] = [];
 	  for (let i = 0; i < completions.length; i++) {
 		const completion = completions[i];
 	    const childNode = canvas.createTextNode({
 	      file,
-	      pos: { x: node.x + node.width + 50, y: node.y + 125 * i - offset },
+	      pos: { x: node.x + node.width + 50, y: node.y },
 		  size: { width: 300, height: 100 },
 	      text: completion,
 	      save: true,
@@ -1301,7 +1300,43 @@ export default class LoomPlugin extends Plugin {
 		  nodes: data.nodes,
 	    });
 		canvas.requestFrame();
+
+		await new Promise(r => setTimeout(r, 50)); // wait for the element to render
+
+		// get height of new node's element
+		const element = childNode.nodeEl;
+		const sizer = element.querySelector(".markdown-preview-sizer");
+		const height = sizer.getBoundingClientRect().height;
+
+	    const data_ = canvas.getData();
+		canvas.importData({
+		  edges: data_.edges,
+		  nodes: data_.nodes.map((node: any) => {
+			if (node.id === childNode.id) node.height = height / canvas.scale + 52;
+			return node;
+		  }
+		)});
+		canvas.requestFrame();
+
+		childNodes.push(childNode.id);
 	  }
+
+	  // adjust the y positions of the child nodes
+	  const data = canvas.getData();
+	  let y = node.y;
+	  canvas.importData({
+		edges: data.edges,
+		nodes: data.nodes.map((node: any) => {
+		  if (childNodes.includes(node.id)) {
+			node.y = y;
+			y += node.height + 50;
+		  }
+		  return node;
+		}
+	  )});
+
+	  canvas.deselectAll();
+	  childNodes.forEach((id: string) => canvas.select(canvas.nodes.get(id)));
 	});
   }
 
