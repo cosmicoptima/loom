@@ -172,7 +172,7 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) => {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
-		if (file.extension !== "md") return false;
+		if (!["md", "canvas"].contains(file.extension)) return false;
 
         // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
         if (
@@ -190,7 +190,12 @@ export default class LoomPlugin extends Plugin {
         if (this.settings.provider === "ocp" && !this.settings.ocpApiKey)
           return false;
 
-        if (!checking) this.complete(file);
+        if (!checking) {
+		  if (file.extension === "md")
+			this.mdComplete(file);
+          else if (file.extension === "canvas")
+		    this.canvasComplete(file);
+		}
         return true;
       },
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
@@ -1038,20 +1043,8 @@ export default class LoomPlugin extends Plugin {
     this.thenSaveAndRender(() => {});
   }
 
-  async complete(file: TFile) {
+  async complete(prompt: string) {
     this.statusBarItem.style.display = "inline-flex";
-
-    const state = this.state[file.path];
-
-    this.breakAtPoint();
-    this.app.workspace.trigger("loom:switch-to", state.current);
-
-    this.state[file.path].generating = state.current;
-    this.save();
-    this.renderViews();
-    this.renderSiblingsViews();
-
-    let prompt = this.fullText(state.current, state);
 
     // remove a trailing space if there is one
     // store whether there was, so it can be added back post-completion
@@ -1072,10 +1065,10 @@ export default class LoomPlugin extends Plugin {
     prompt = tokenizer.decode(tokens);
 
     // complete, or visually display an error and return if that fails
-    let completions;
+    let rawCompletions;
     try {
       if (this.settings.provider === "openai-chat") {
-        completions = (
+        rawCompletions = (
           await this.openai.createChatCompletion({
             model: this.settings.model,
             messages: [{ role: "assistant", content: prompt }],
@@ -1086,7 +1079,7 @@ export default class LoomPlugin extends Plugin {
           })
         ).data.choices.map((choice) => choice.message?.content);
       } else if (this.settings.provider === "openai") {
-        completions = (
+        rawCompletions = (
           await this.openai.createCompletion({
             model: this.settings.model,
             prompt,
@@ -1133,7 +1126,7 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = response.body.generations.map(
+      rawCompletions = response.body.generations.map(
         (generation) => generation.text
       );
     } else if (this.settings.provider === "textsynth") {
@@ -1160,8 +1153,8 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      if (this.settings.n === 1) completions = [response.json.text];
-      else completions = response.json.text;
+      if (this.settings.n === 1) rawCompletions = [response.json.text];
+      else rawCompletions = response.json.text;
     } else if (this.settings.provider === "ocp") {
       let url = this.settings.ocpUrl;
 
@@ -1192,21 +1185,20 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = response.json.choices.map(
+      rawCompletions = response.json.choices.map(
         (choice: any) => choice.text
       );
     }
 
-    if (completions === undefined) {
+    if (rawCompletions === undefined) {
       new Notice("Invalid provider: " + this.settings.provider);
 
       this.statusBarItem.style.display = "none";
       return;
     }
 
-    // create a child node to the current node for each completion
-    let ids = [];
-    for (let completion of completions) {
+    let completions = [];
+    for (let completion of rawCompletions) {
       if (!completion) completion = ""; // empty completions are null, apparently
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
 	  completion = completion.replace(/\[/g, "\\["); // escape [ for obsidian
@@ -1215,7 +1207,33 @@ export default class LoomPlugin extends Plugin {
         if (!trailingSpace) completion = " " + completion;
       } else if (trailingSpace && completion[0] === " ")
         completion = completion.slice(1);
+	
+	  completions.push(completion);
+	}
 
+	this.statusBarItem.style.display = "none";
+	return completions;
+  }
+
+  async mdComplete(file: TFile) {
+    const state = this.state[file.path];
+
+    this.breakAtPoint();
+    this.app.workspace.trigger("loom:switch-to", state.current);
+
+    this.state[file.path].generating = state.current;
+    this.save();
+    this.renderViews();
+    this.renderSiblingsViews();
+
+    let prompt = this.fullText(state.current, state);
+
+	const completions = await this.complete(prompt);
+	if (!completions) return;
+
+    // create a child node to the current node for each completion
+    let ids = [];
+    for (let completion of completions) {
       const id = uuidv4();
       state.nodes[id] = {
         text: completion,
@@ -1237,6 +1255,54 @@ export default class LoomPlugin extends Plugin {
     this.renderSiblingsViews();
 
     this.statusBarItem.style.display = "none";
+  }
+
+  async canvasComplete(file: TFile) {
+	// @ts-expect-error
+	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
+	console.log(canvas);
+	
+    const onlySetMember = (set: Set<unknown>) => {
+      if (set.size !== 1) {
+		new Notice("Node has multiple parents");
+		throw new Error("Set has more than one member");
+	  }
+	  return set.values().next().value;
+	}
+
+	canvas.selection.forEach(async (node: any) => {
+	  let text = node.text;
+	  let currentNode = canvas.edgeTo.data.get(node);
+	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
+	  while (currentNode) {
+		text = currentNode.text + " " + text;
+		currentNode = canvas.edgeTo.data.get(currentNode);
+		if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
+	  }
+
+	  const completions = await this.complete(text);
+	  if (!completions) return;
+
+	  const offset = 62.5 * (completions.length - 1);
+	  for (let i = 0; i < completions.length; i++) {
+		const completion = completions[i];
+	    const childNode = canvas.createTextNode({
+	      file,
+	      pos: { x: node.x + node.width + 50, y: node.y + 125 * i - offset },
+		  size: { width: 300, height: 100 },
+	      text: completion,
+	      save: true,
+	      focus: false,
+	    });
+
+		const data = canvas.getData();
+		canvas.importData({
+		  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
+		  nodes: data.nodes,
+	    });
+		canvas.requestFrame();
+	  }
+	});
   }
 
   fullText(id: string, state: NoteState) {
