@@ -194,7 +194,7 @@ export default class LoomPlugin extends Plugin {
 		  if (file.extension === "md")
 			this.mdComplete(file);
           else if (file.extension === "canvas")
-		    this.canvasComplete(file);
+		    this.canvasComplete();
 		}
         return true;
       },
@@ -203,10 +203,12 @@ export default class LoomPlugin extends Plugin {
 
     const withState = (
       checking: boolean,
-      callback: (state: NoteState) => void
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
 	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
@@ -219,10 +221,12 @@ export default class LoomPlugin extends Plugin {
     const withStateAddl = (
       checking: boolean,
       checkCallback: (state: NoteState) => boolean,
-      callback: (state: NoteState) => void
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
 	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
@@ -297,7 +301,7 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:break-at-point", state.current);
-        }),
+        }, () => this.canvasBreakAtPoint()),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
@@ -1257,7 +1261,7 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.style.display = "none";
   }
 
-  async canvasComplete(file: TFile) {
+  async canvasComplete() {
 	// @ts-expect-error
 	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
 	
@@ -1285,39 +1289,7 @@ export default class LoomPlugin extends Plugin {
 	  let childNodes: any[] = [];
 	  for (let i = 0; i < completions.length; i++) {
 		const completion = completions[i];
-	    const childNode = canvas.createTextNode({
-	      file,
-	      pos: { x: node.x + node.width + 50, y: node.y },
-		  size: { width: 300, height: 100 },
-	      text: completion,
-	      save: true,
-	      focus: false,
-	    });
-
-		const data = canvas.getData();
-		canvas.importData({
-		  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
-		  nodes: data.nodes,
-	    });
-		canvas.requestFrame();
-
-		await new Promise(r => setTimeout(r, 50)); // wait for the element to render
-
-		// get height of new node's element
-		const element = childNode.nodeEl;
-		const sizer = element.querySelector(".markdown-preview-sizer");
-		const height = sizer.getBoundingClientRect().height;
-
-	    const data_ = canvas.getData();
-		canvas.importData({
-		  edges: data_.edges,
-		  nodes: data_.nodes.map((node: any) => {
-			if (node.id === childNode.id) node.height = height / canvas.scale + 52;
-			return node;
-		  }
-		)});
-		canvas.requestFrame();
-
+		const childNode = await this.canvasCreateChildNode(canvas, node, completion);
 		childNodes.push(childNode.id);
 	  }
 
@@ -1476,6 +1448,67 @@ export default class LoomPlugin extends Plugin {
 
       return inRangeNode;
     });
+  }
+
+  canvasBreakAtPoint(): boolean {
+	const view = this.app.workspace.getActiveViewOfType(ItemView);
+	if (!view) return false;
+	// @ts-expect-error
+	const canvas = view.canvas;
+
+	canvas.selection.forEach((node: any) => {
+	  if (!node.isEditing) return;
+
+      const editor = node.child.editor;
+	  const text = editor.getValue();
+	  const lines = text.split("\n");
+	  const cursor = editor.getCursor();
+
+      const before = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+      const after = text.slice(before.length);
+
+	  editor.setValue(before);
+	  editor.setCursor({line: cursor.line, ch: cursor.ch - 1});
+
+	  this.canvasCreateChildNode(canvas, node, after);
+	});
+
+	return true;
+  }
+
+  async canvasCreateChildNode(canvas: any, node: any, childText: string) {
+    const childNode = canvas.createTextNode({
+	  pos: { x: node.x + node.width + 50, y: node.y },
+	  size: { width: 300, height: 100 },
+	  text: childText,
+	  save: true,
+	  focus: false,
+	});
+
+	const data = canvas.getData();
+	canvas.importData({
+	  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
+	  nodes: data.nodes,
+	});
+	canvas.requestFrame();
+
+	await new Promise(r => setTimeout(r, 50)); // wait for the element to render
+
+	const element = childNode.nodeEl;
+	const sizer = element.querySelector(".markdown-preview-sizer");
+	const height = sizer.getBoundingClientRect().height;
+
+	const data_ = canvas.getData();
+	canvas.importData({
+	  edges: data_.edges,
+	  nodes: data_.nodes.map((node: any) => {
+		if (node.id === childNode.id) node.height = height / canvas.scale + 52;
+		return node;
+	  }
+	)});
+	canvas.requestFrame();
+
+	return childNode;
   }
 
   async loadSettings() {
