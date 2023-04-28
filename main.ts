@@ -1274,7 +1274,21 @@ export default class LoomPlugin extends Plugin {
 	}
 
 	canvas.selection.forEach(async (node: any) => {
-	  let text = node.text;
+	  let text
+	  let childNodes: any[] = [];
+
+	  if (node.isEditing) {
+        const editor = node.child.editor;
+	    const editorValue = editor.getValue();
+	    const lines = editorValue.split("\n");
+	    const cursor = editor.getCursor();
+
+        text = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+		editor.setValue(text);
+        const after = editorValue.slice(text.length);
+		const childNode = await this.canvasCreateChildNode(canvas, node, after);
+		childNodes.push(childNode.id);
+	  } else text = node.text;
 	  let currentNode = canvas.edgeTo.data.get(node);
 	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
 	  while (currentNode) {
@@ -1286,7 +1300,6 @@ export default class LoomPlugin extends Plugin {
 	  const completions = await this.complete(text);
 	  if (!completions) return;
 
-	  let childNodes: any[] = [];
 	  for (let i = 0; i < completions.length; i++) {
 		const completion = completions[i];
 		const childNode = await this.canvasCreateChildNode(canvas, node, completion);
@@ -1295,10 +1308,11 @@ export default class LoomPlugin extends Plugin {
 
 	  // adjust the y positions of the child nodes
 	  const data = canvas.getData();
+	  const reversedNodes = [...data.nodes].reverse();
 	  let y = node.y;
 	  canvas.importData({
 		edges: data.edges,
-		nodes: data.nodes.map((node: any) => {
+		nodes: reversedNodes.map((node: any) => {
 		  if (childNodes.includes(node.id)) {
 			node.y = y;
 			y += node.height + 50;
