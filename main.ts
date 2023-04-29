@@ -471,7 +471,10 @@ export default class LoomPlugin extends Plugin {
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
 
-    const getState = () => this.withFile((file) => this.state[file.path]);
+    const getState = () => this.withFile((file) => {
+	  if (file.extension === "canvas") return "canvas";
+	  return this.state[file.path];
+	});
     const getSettings = () => this.settings;
 
     this.registerView(
@@ -1262,6 +1265,8 @@ export default class LoomPlugin extends Plugin {
   }
 
   async canvasComplete() {
+	new Notice("Generating...");
+
 	// @ts-expect-error
 	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
 	
@@ -1542,12 +1547,12 @@ export default class LoomPlugin extends Plugin {
 }
 
 class LoomView extends ItemView {
-  getNoteState: () => NoteState | null;
+  getNoteState: () => NoteState | "canvas" | null;
   getSettings: () => LoomSettings;
 
   constructor(
     leaf: WorkspaceLeaf,
-    getNoteState: () => NoteState | null,
+    getNoteState: () => NoteState | "canvas" | null,
     getSettings: () => LoomSettings
   ) {
     super(leaf);
@@ -1770,6 +1775,13 @@ class LoomView extends ItemView {
       });
       return;
     }
+	if (state === "canvas") {
+	  container.createEl("div", {
+		cls: "pane-empty",
+		text: "The selected note is a canvas.",
+	  });
+	  return;
+	}
 
     const nodes = Object.entries(state.nodes);
 
@@ -2101,9 +2113,9 @@ class LoomView extends ItemView {
 }
 
 class LoomSiblingsView extends ItemView {
-  getNoteState: () => NoteState | null;
+  getNoteState: () => NoteState | "canvas" | null;
 
-  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null) {
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | "canvas" | null) {
     super(leaf);
     this.getNoteState = getNoteState;
     this.render();
@@ -2125,6 +2137,13 @@ class LoomSiblingsView extends ItemView {
       });
       return;
     }
+	if (state === "canvas") {
+	  outline.createEl("div", {
+		text: "The selected note is a canvas.",
+		cls: "pane-empty",
+	  });
+	  return;
+	}
 
     const parentId = state.nodes[state.current].parentId;
     const siblings = Object.entries(state.nodes).filter(
