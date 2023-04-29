@@ -1607,45 +1607,47 @@ class LoomView extends ItemView {
       "Show node borders in the editor"
     );
 
-    const importFileInput = navButtonsContainer.createEl("input", {
-      cls: "hidden",
-      attr: { type: "file", id: "loom-import" },
-    });
-    const importNavButton = navButtonsContainer.createEl("label", {
-      cls: "clickable-icon nav-action-button",
-      attr: { "aria-label": "Import JSON", for: "loom-import" },
-    });
-    setIcon(importNavButton, "import");
-    importFileInput.addEventListener("change", () =>
-      // @ts-expect-error
-      this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
-    );
+	if (state !== "canvas") {
+      const importFileInput = navButtonsContainer.createEl("input", {
+        cls: "hidden",
+        attr: { type: "file", id: "loom-import" },
+      });
+      const importNavButton = navButtonsContainer.createEl("label", {
+        cls: "clickable-icon nav-action-button",
+        attr: { "aria-label": "Import JSON", for: "loom-import" },
+      });
+      setIcon(importNavButton, "import");
+      importFileInput.addEventListener("change", () =>
+        // @ts-expect-error
+        this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
+      );
 
-    const exportNavButton = navButtonsContainer.createDiv({
-      cls: `clickable-icon nav-action-button${
-        settings.showExport ? " is-active" : ""
-      }`,
-      attr: { "aria-label": "Export to JSON" },
-    });
-    setIcon(exportNavButton, "download");
-    exportNavButton.addEventListener("click", (e) => {
-      if (e.shiftKey)
-        this.app.workspace.trigger(
-          "loom:set-setting",
-          "showExport",
-          !settings.showExport
-        );
-      else
-        dialog
-          .showSaveDialog({
-            title: "Export to JSON",
-            filters: [{ extensions: ["json"] }],
-          })
-          .then((result: any) => {
-            if (result)
-              this.app.workspace.trigger("loom:export", result.filePath);
-          });
-    });
+      const exportNavButton = navButtonsContainer.createDiv({
+        cls: `clickable-icon nav-action-button${
+          settings.showExport ? " is-active" : ""
+        }`,
+        attr: { "aria-label": "Export to JSON" },
+      });
+      setIcon(exportNavButton, "download");
+      exportNavButton.addEventListener("click", (e) => {
+        if (e.shiftKey)
+          this.app.workspace.trigger(
+            "loom:set-setting",
+            "showExport",
+            !settings.showExport
+          );
+        else
+          dialog
+            .showSaveDialog({
+              title: "Export to JSON",
+              filters: [{ extensions: ["json"] }],
+            })
+            .then((result: any) => {
+              if (result)
+                this.app.workspace.trigger("loom:export", result.filePath);
+            });
+      });
+	}
 
     // create the main container, which uses the `outline` class, which has
     // a margin visually consistent with other panes
