@@ -223,7 +223,7 @@ export default class LoomPlugin extends Plugin {
 		  if (file.extension === "md")
 			this.mdComplete(file);
           else if (file.extension === "canvas")
-		    this.canvasComplete(file);
+		    this.canvasComplete();
 		}
         return true;
       },
@@ -232,10 +232,12 @@ export default class LoomPlugin extends Plugin {
 
     const withState = (
       checking: boolean,
-      callback: (state: NoteState) => void
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
 	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
@@ -248,10 +250,12 @@ export default class LoomPlugin extends Plugin {
     const withStateAddl = (
       checking: boolean,
       checkCallback: (state: NoteState) => boolean,
-      callback: (state: NoteState) => void
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
     ) => {
       const file = this.app.workspace.getActiveFile();
       if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
 	  if (file.extension !== "md") return false;
 
       const state = this.state[file.path];
@@ -326,7 +330,7 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:break-at-point", state.current);
-        }),
+        }, () => this.canvasBreakAtPoint()),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
@@ -496,7 +500,10 @@ export default class LoomPlugin extends Plugin {
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
 
-    const getState = () => this.withFile((file) => this.state[file.path]);
+    const getState = () => this.withFile((file) => {
+	  if (file.extension === "canvas") return "canvas";
+	  return this.state[file.path];
+	});
     const getSettings = () => this.settings;
 
     this.registerView(
@@ -1308,10 +1315,11 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.style.display = "none";
   }
 
-  async canvasComplete(file: TFile) {
+  async canvasComplete() {
+	new Notice("Generating...");
+
 	// @ts-expect-error
 	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
-	console.log(canvas);
 	
     const onlySetMember = (set: Set<unknown>) => {
       if (set.size !== 1) {
@@ -1322,11 +1330,25 @@ export default class LoomPlugin extends Plugin {
 	}
 
 	canvas.selection.forEach(async (node: any) => {
-	  let text = node.text;
+	  let text
+	  let childNodes: any[] = [];
+
+	  if (node.isEditing) {
+        const editor = node.child.editor;
+	    const editorValue = editor.getValue();
+	    const lines = editorValue.split("\n");
+	    const cursor = editor.getCursor();
+
+        text = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+		editor.setValue(text);
+        const after = editorValue.slice(text.length);
+		const childNode = await this.canvasCreateChildNode(canvas, node, after);
+		childNodes.push(childNode.id);
+	  } else text = node.text;
 	  let currentNode = canvas.edgeTo.data.get(node);
 	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
 	  while (currentNode) {
-		text = currentNode.text + " " + text;
+		text = currentNode.text + text;
 		currentNode = canvas.edgeTo.data.get(currentNode);
 		if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
 	  }
@@ -1334,25 +1356,29 @@ export default class LoomPlugin extends Plugin {
 	  const completions = await this.complete(text);
 	  if (!completions) return;
 
-	  const offset = 62.5 * (completions.length - 1);
 	  for (let i = 0; i < completions.length; i++) {
 		const completion = completions[i];
-	    const childNode = canvas.createTextNode({
-	      file,
-	      pos: { x: node.x + node.width + 50, y: node.y + 125 * i - offset },
-		  size: { width: 300, height: 100 },
-	      text: completion,
-	      save: true,
-	      focus: false,
-	    });
-
-		const data = canvas.getData();
-		canvas.importData({
-		  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
-		  nodes: data.nodes,
-	    });
-		canvas.requestFrame();
+		const childNode = await this.canvasCreateChildNode(canvas, node, completion);
+		childNodes.push(childNode.id);
 	  }
+
+	  // adjust the y positions of the child nodes
+	  const data = canvas.getData();
+	  const reversedNodes = [...data.nodes].reverse();
+	  let y = node.y;
+	  canvas.importData({
+		edges: data.edges,
+		nodes: reversedNodes.map((node: any) => {
+		  if (childNodes.includes(node.id)) {
+			node.y = y;
+			y += node.height + 50;
+		  }
+		  return node;
+		}
+	  )});
+
+	  canvas.deselectAll();
+	  childNodes.forEach((id: string) => canvas.select(canvas.nodes.get(id)));
 	});
   }
 
@@ -1494,6 +1520,67 @@ export default class LoomPlugin extends Plugin {
     });
   }
 
+  canvasBreakAtPoint(): boolean {
+	const view = this.app.workspace.getActiveViewOfType(ItemView);
+	if (!view) return false;
+	// @ts-expect-error
+	const canvas = view.canvas;
+
+	canvas.selection.forEach((node: any) => {
+	  if (!node.isEditing) return;
+
+      const editor = node.child.editor;
+	  const text = editor.getValue();
+	  const lines = text.split("\n");
+	  const cursor = editor.getCursor();
+
+      const before = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+      const after = text.slice(before.length);
+
+	  editor.setValue(before);
+	  editor.setCursor({line: cursor.line, ch: cursor.ch - 1});
+
+	  this.canvasCreateChildNode(canvas, node, after);
+	});
+
+	return true;
+  }
+
+  async canvasCreateChildNode(canvas: any, node: any, childText: string) {
+    const childNode = canvas.createTextNode({
+	  pos: { x: node.x + node.width + 50, y: node.y },
+	  size: { width: 300, height: 100 },
+	  text: childText,
+	  save: true,
+	  focus: false,
+	});
+
+	const data = canvas.getData();
+	canvas.importData({
+	  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
+	  nodes: data.nodes,
+	});
+	canvas.requestFrame();
+
+	await new Promise(r => setTimeout(r, 50)); // wait for the element to render
+
+	const element = childNode.nodeEl;
+	const sizer = element.querySelector(".markdown-preview-sizer");
+	const height = sizer.getBoundingClientRect().height;
+
+	const data_ = canvas.getData();
+	canvas.importData({
+	  edges: data_.edges,
+	  nodes: data_.nodes.map((node: any) => {
+		if (node.id === childNode.id) node.height = height / canvas.scale + 52;
+		return node;
+	  }
+	)});
+	canvas.requestFrame();
+
+	return childNode;
+  }
+
   async loadSettings() {
     const settings = (await this.loadData())?.settings || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
@@ -1511,12 +1598,12 @@ export default class LoomPlugin extends Plugin {
 }
 
 class LoomView extends ItemView {
-  getNoteState: () => NoteState | null;
+  getNoteState: () => NoteState | "canvas" | null;
   getSettings: () => LoomSettings;
 
   constructor(
     leaf: WorkspaceLeaf,
-    getNoteState: () => NoteState | null,
+    getNoteState: () => NoteState | "canvas" | null,
     getSettings: () => LoomSettings
   ) {
     super(leaf);
@@ -1571,45 +1658,47 @@ class LoomView extends ItemView {
       "Show node borders in the editor"
     );
 
-    const importFileInput = navButtonsContainer.createEl("input", {
-      cls: "hidden",
-      attr: { type: "file", id: "loom-import" },
-    });
-    const importNavButton = navButtonsContainer.createEl("label", {
-      cls: "clickable-icon nav-action-button",
-      attr: { "aria-label": "Import JSON", for: "loom-import" },
-    });
-    setIcon(importNavButton, "import");
-    importFileInput.addEventListener("change", () =>
-      // @ts-expect-error
-      this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
-    );
+	if (state !== "canvas") {
+      const importFileInput = navButtonsContainer.createEl("input", {
+        cls: "hidden",
+        attr: { type: "file", id: "loom-import" },
+      });
+      const importNavButton = navButtonsContainer.createEl("label", {
+        cls: "clickable-icon nav-action-button",
+        attr: { "aria-label": "Import JSON", for: "loom-import" },
+      });
+      setIcon(importNavButton, "import");
+      importFileInput.addEventListener("change", () =>
+        // @ts-expect-error
+        this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
+      );
 
-    const exportNavButton = navButtonsContainer.createDiv({
-      cls: `clickable-icon nav-action-button${
-        settings.showExport ? " is-active" : ""
-      }`,
-      attr: { "aria-label": "Export to JSON" },
-    });
-    setIcon(exportNavButton, "download");
-    exportNavButton.addEventListener("click", (e) => {
-      if (e.shiftKey)
-        this.app.workspace.trigger(
-          "loom:set-setting",
-          "showExport",
-          !settings.showExport
-        );
-      else
-        dialog
-          .showSaveDialog({
-            title: "Export to JSON",
-            filters: [{ extensions: ["json"] }],
-          })
-          .then((result: any) => {
-            if (result)
-              this.app.workspace.trigger("loom:export", result.filePath);
-          });
-    });
+      const exportNavButton = navButtonsContainer.createDiv({
+        cls: `clickable-icon nav-action-button${
+          settings.showExport ? " is-active" : ""
+        }`,
+        attr: { "aria-label": "Export to JSON" },
+      });
+      setIcon(exportNavButton, "download");
+      exportNavButton.addEventListener("click", (e) => {
+        if (e.shiftKey)
+          this.app.workspace.trigger(
+            "loom:set-setting",
+            "showExport",
+            !settings.showExport
+          );
+        else
+          dialog
+            .showSaveDialog({
+              title: "Export to JSON",
+              filters: [{ extensions: ["json"] }],
+            })
+            .then((result: any) => {
+              if (result)
+                this.app.workspace.trigger("loom:export", result.filePath);
+            });
+      });
+	}
 
     // create the main container, which uses the `outline` class, which has
     // a margin visually consistent with other panes
@@ -1741,6 +1830,13 @@ class LoomView extends ItemView {
       });
       return;
     }
+	if (state === "canvas") {
+	  container.createEl("div", {
+		cls: "pane-empty",
+		text: "The selected note is a canvas.",
+	  });
+	  return;
+	}
 
     const nodes = Object.entries(state.nodes);
 
@@ -2072,9 +2168,9 @@ class LoomView extends ItemView {
 }
 
 class LoomSiblingsView extends ItemView {
-  getNoteState: () => NoteState | null;
+  getNoteState: () => NoteState | "canvas" | null;
 
-  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | null) {
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | "canvas" | null) {
     super(leaf);
     this.getNoteState = getNoteState;
     this.render();
@@ -2096,6 +2192,13 @@ class LoomSiblingsView extends ItemView {
       });
       return;
     }
+	if (state === "canvas") {
+	  outline.createEl("div", {
+		text: "The selected note is a canvas.",
+		cls: "pane-empty",
+	  });
+	  return;
+	}
 
     const parentId = state.nodes[state.current].parentId;
     const siblings = Object.entries(state.nodes).filter(
