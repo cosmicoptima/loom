@@ -272,7 +272,9 @@ export default class LoomPlugin extends Plugin {
       const loomPanes = this.app.workspace.getLeavesOfType("loom");
       try {
         if (loomPanes.length === 0)
-          this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
+          this.app.workspace
+          .getRightLeaf(false)
+          .setViewState({ type: "loom" });
         else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
       } catch (e) {
         console.error(e);
@@ -1594,6 +1596,7 @@ export default class LoomPlugin extends Plugin {
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
     this.setOpenAI();
+    this.setAzureOpenAI();
     this.setCohere();
   }
 }
