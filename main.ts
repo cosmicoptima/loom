@@ -160,8 +160,9 @@ export default class LoomPlugin extends Plugin {
     cohere.init(this.settings.cohereApiKey);
   }
 
-  // https://github.com/1openwindow/azure-openai-node
   setAzureOpenAI() {
+	if (!this.settings.azureApiKey || !this.settings.azureEndpoint) return;
+
     const configuration = new AzureConfiguration({
       apiKey: this.settings.azureApiKey,
       // add azure info into configuration
