@@ -27,6 +27,7 @@
 		"@codemirror/state": "^6.2.0",
 		"@codemirror/view": "^6.9.3",
 		"@types/lodash": "^4.14.191",
+		"azure-openai": "^0.9.4",
 		"cohere-ai": "^6.1.0",
 		"gpt3-tokenizer": "^1.1.5",
 		"openai": "^3.2.0",
