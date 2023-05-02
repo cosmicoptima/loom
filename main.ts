@@ -24,6 +24,7 @@ import {
   ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
+import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAiApi} from "azure-openai";
 import * as cohere from "cohere-ai";
 import * as fs from "fs";
 import GPT3Tokenizer from "gpt3-tokenizer";
@@ -34,13 +35,16 @@ const untildify = require("untildify") as any;
 
 const tokenizer = new GPT3Tokenizer({ type: "codex" }); // TODO depends on model
 
-const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat"];
+const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat"];
 type Provider = (typeof PROVIDERS)[number];
 
 interface LoomSettings {
   openaiApiKey: string;
   cohereApiKey: string;
   textsynthApiKey: string;
+
+  azureApiKey: string;
+  azureEndpoint: string;
 
   ocpApiKey: string;
   ocpUrl: string;
@@ -67,6 +71,9 @@ const DEFAULT_SETTINGS: LoomSettings = {
   openaiApiKey: "",
   cohereApiKey: "",
   textsynthApiKey: "",
+
+  azureApiKey: "",
+  azureEndpoint: "",
 
   ocpApiKey: "",
   ocpUrl: "",
@@ -110,6 +117,7 @@ export default class LoomPlugin extends Plugin {
   statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
+  azure: AzureOpenAiApi;
 
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
@@ -152,6 +160,20 @@ export default class LoomPlugin extends Plugin {
     cohere.init(this.settings.cohereApiKey);
   }
 
+  // https://github.com/1openwindow/azure-openai-node
+  setAzureOpenAI() {
+    const configuration = new AzureConfiguration({
+      apiKey: this.settings.azureApiKey,
+      // add azure info into configuration
+      azure: {
+        apiKey: this.settings.azureApiKey,
+        endpoint: this.settings.azureEndpoint
+     }
+    });
+    this.azure = new AzureOpenAiApi(configuration);
+  }
+
+
   async onload() {
     await this.loadSettings();
     await this.loadState();
@@ -160,6 +182,7 @@ export default class LoomPlugin extends Plugin {
 
     this.setOpenAI();
     this.setCohere();
+    this.setAzureOpenAI();
 
     this.statusBarItem = this.addStatusBarItem();
     this.statusBarItem.setText("Completing...");
@@ -174,6 +197,11 @@ export default class LoomPlugin extends Plugin {
       if (
         ["openai", "openai-chat"].includes(this.settings.provider) &&
         !this.settings.openaiApiKey
+      )
+        return false;
+      if (
+        ["azure", "azure-chat"].includes(this.settings.provider) &&
+        !this.settings.azureApiKey
       )
         return false;
       if (this.settings.provider === "cohere" && !this.settings.cohereApiKey)
@@ -252,7 +280,9 @@ export default class LoomPlugin extends Plugin {
       const loomPanes = this.app.workspace.getLeavesOfType("loom");
       try {
         if (loomPanes.length === 0)
-          this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
+          this.app.workspace
+          .getRightLeaf(false)
+          .setViewState({ type: "loom" });
         else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
       } catch (e) {
         console.error(e);
@@ -1106,19 +1136,35 @@ export default class LoomPlugin extends Plugin {
             top_p: this.settings.topP,
           })
         ).data.choices.map((choice) => choice.text);
+      } else if (this.settings.provider === "azure-chat") {
+        rawCompletions = (
+          await this.azure.createChatCompletion({
+            model: this.settings.model,
+            messages: [{ role: "assistant", content: prompt }],
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+            top_p: this.settings.topP,
+          })
+        ).data.choices.map((choice) => choice.message?.content);
+      } else if (this.settings.provider === "azure") {
+        rawCompletions = (
+          await this.azure.createCompletion({
+            model: this.settings.model,
+            prompt,
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+            top_p: this.settings.topP,
+          })
+        ).data.choices.map((choice) => choice.text);
       }
     } catch (e) {
-      if (
-        e.response.status === 401 &&
-        ["openai", "openai-chat"].includes(this.settings.provider)
-      )
+      if (e.response.status === 401)
         new Notice(
           "OpenAI API key is invalid. Please provide a valid key in the settings."
         );
-      else if (
-        e.response.status === 429 &&
-        ["openai", "openai-chat"].includes(this.settings.provider)
-      )
+      else if (e.response.status === 429)
         new Notice("OpenAI API rate limit exceeded.");
       else new Notice("Unknown API error: " + e.response.data.error.message);
 
@@ -1220,7 +1266,7 @@ export default class LoomPlugin extends Plugin {
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
 	  completion = completion.replace(/\[/g, "\\["); // escape [ for obsidian
 
-      if (this.settings.provider === "openai-chat") {
+      if (["azure-chat", "openai-chat"].includes(this.settings.provider))  {
         if (!trailingSpace) completion = " " + completion;
       } else if (trailingSpace && completion[0] === " ")
         completion = completion.slice(1);
@@ -1566,6 +1612,7 @@ export default class LoomPlugin extends Plugin {
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
     this.setOpenAI();
+    this.setAzureOpenAI();
     this.setCohere();
   }
 }
@@ -1734,6 +1781,8 @@ class LoomView extends ItemView {
       { name: "OpenAI code-davinci-002 proxy", value: "ocp" },
       { name: "OpenAI (Completion)", value: "openai" },
       { name: "OpenAI (Chat)", value: "openai-chat" },
+      { name: "Azure (Completion)", value: "azure" },
+      { name: "Azure (Chat)", value: "azure-chat" },
     ];
     providerOptions.forEach((option) => {
       const optionEl = providerSelect.createEl("option", {
@@ -2365,6 +2414,8 @@ class LoomSettingTab extends PluginSettingTab {
       dropdown.addOption("ocp", "OpenAI code-davinci-002 proxy");
       dropdown.addOption("openai", "OpenAI (Completion)");
       dropdown.addOption("openai-chat", "OpenAI (Chat)");
+      dropdown.addOption("azure", "Azure (Completion)");
+      dropdown.addOption("azure-chat", "Azure (Chat)");
       dropdown.setValue(this.plugin.settings.provider);
       dropdown.onChange(async (value) => {
         if (PROVIDERS.find((provider) => provider === value))
@@ -2402,6 +2453,18 @@ class LoomSettingTab extends PluginSettingTab {
       );
 
     apiKeySetting("OpenAI", "openaiApiKey");
+    apiKeySetting("Azure", "azureApiKey")
+
+    new Setting(containerEl)
+        .setName("Azure-Openai Resource Endpoint")
+        .setDesc("Required if using Azure")
+        .addText((text) =>
+            text.setValue(this.plugin.settings.azureEndpoint).onChange(async (value) => {
+              this.plugin.settings.azureEndpoint = value;
+              await this.plugin.save();
+            })
+        );
+          
 
     // TODO: reduce duplication of other settings
 
