@@ -13,6 +13,7 @@ If you are interested in funding development of Loom(sidian), you can **[support
 **Default hotkeys:**
 
 - `Ctrl+Space` - complete
+- `Ctrl+Shift+Space` - generate siblings
 - `Ctrl+Alt+n` - create child
 - `Alt+n` - create sibling
 - `Ctrl+Alt+c` - clone current node
