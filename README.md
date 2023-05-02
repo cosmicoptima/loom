@@ -4,6 +4,8 @@ This is a reimplementation of [Loom](https://github.com/socketteer/loom) as an O
 
 Loom is a recursively branching interface to GPT-3 and other language models; it is designed to be conducive to exploratory and experimental use of base models. The workflow primarily consists of this: you hit `Ctrl+Space` from a point in the text, and Loom generates `n` child nodes of the current node, where each child contains a different completion of the text leading up to the cursor. This is paired with a tree interface and settings panel in the right sidebar, as well as a pane containing the full text of the current node and its siblings.
 
+Loom also works on canvas files, but it doesn't work *well*, and I don't plan to improve this in the near future.
+
 Loom can request completions from the following providers: [Cohere](https://docs.cohere.ai/docs), [TextSynth](https://textsynth.com/documentation.html), and [OpenAI](https://platform.openai.com/docs/introduction). It can also request completions from implementations of [openai-cd2-proxy](https://github.com/cosmicoptima/openai-cd2-proxy), in which case you must provide the base URL in the Loom tab in Settings.
 
 If you are interested in funding development of Loom(sidian), you can **[support me on Patreon](https://patreon.com/parafactual)**; I would then be able to devote more time to this and other independent projects.
