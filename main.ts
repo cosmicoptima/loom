@@ -338,7 +338,7 @@ export default class LoomPlugin extends Plugin {
 
     this.addCommand({
       id: "break-at-point",
-      name: "Branch from current point",
+      name: "Split at current point",
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:break-at-point", state.current);
