@@ -217,7 +217,7 @@ export default class LoomPlugin extends Plugin {
 
       if (!checking) {
 	    if (file.extension === "md")
-	  	this.mdComplete(file, siblings);
+	  	  this.mdComplete(file, siblings);
         else if (file.extension === "canvas")
 	      this.canvasComplete(siblings);
 	  }
@@ -2457,7 +2457,7 @@ class LoomSettingTab extends PluginSettingTab {
     apiKeySetting("Azure", "azureApiKey")
 
     new Setting(containerEl)
-        .setName("Azure-Openai Resource Endpoint")
+        .setName("Azure resource endpoint")
         .setDesc("Required if using Azure")
         .addText((text) =>
             text.setValue(this.plugin.settings.azureEndpoint).onChange(async (value) => {
