@@ -165,41 +165,51 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.setText("Completing...");
     this.statusBarItem.style.display = "none";
 
+    const complete = (checking: boolean, siblings: boolean) => {
+      const file = this.app.workspace.getActiveFile();
+      if (!file) return false;
+	  if (!["md", "canvas"].contains(file.extension)) return false;
+
+      // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
+      if (
+        ["openai", "openai-chat"].includes(this.settings.provider) &&
+        !this.settings.openaiApiKey
+      )
+        return false;
+      if (this.settings.provider === "cohere" && !this.settings.cohereApiKey)
+        return false;
+      if (
+        this.settings.provider === "textsynth" &&
+        !this.settings.textsynthApiKey
+      )
+        return false;
+      if (this.settings.provider === "ocp" && !this.settings.ocpApiKey)
+        return false;
+
+      if (!checking) {
+	    if (file.extension === "md")
+	  	this.mdComplete(file, siblings);
+        else if (file.extension === "canvas")
+	      this.canvasComplete(siblings);
+	  }
+      return true;
+	}
+
     this.addCommand({
       id: "complete",
       name: "Complete from current point",
       icon: "wand",
-      checkCallback: (checking: boolean) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return false;
-		if (!["md", "canvas"].contains(file.extension)) return false;
-
-        // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
-        if (
-          ["openai", "openai-chat"].includes(this.settings.provider) &&
-          !this.settings.openaiApiKey
-        )
-          return false;
-        if (this.settings.provider === "cohere" && !this.settings.cohereApiKey)
-          return false;
-        if (
-          this.settings.provider === "textsynth" &&
-          !this.settings.textsynthApiKey
-        )
-          return false;
-        if (this.settings.provider === "ocp" && !this.settings.ocpApiKey)
-          return false;
-
-        if (!checking) {
-		  if (file.extension === "md")
-			this.mdComplete(file);
-          else if (file.extension === "canvas")
-		    this.canvasComplete();
-		}
-        return true;
-      },
+      checkCallback: (checking: boolean) => complete(checking, false),
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
     });
+
+	this.addCommand({
+	  id: "generate-siblings",
+	  name: "Generate siblings",
+	  icon: "wand",
+	  checkCallback: (checking: boolean) => complete(checking, true),
+	  hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: " " }],
+	});
 
     const withState = (
       checking: boolean,
@@ -1222,18 +1232,27 @@ export default class LoomPlugin extends Plugin {
 	return completions;
   }
 
-  async mdComplete(file: TFile) {
+  async mdComplete(file: TFile, siblings: boolean) {
     const state = this.state[file.path];
 
-    this.breakAtPoint();
-    this.app.workspace.trigger("loom:switch-to", state.current);
+	let rootNode
+	if (siblings)
+      rootNode = state.nodes[state.current].parentId;
+	else {
+      this.breakAtPoint();
+	  rootNode = state.current;
+	}
 
-    this.state[file.path].generating = state.current;
+	if (rootNode !== null) {
+      this.app.workspace.trigger("loom:switch-to", rootNode);
+      this.state[file.path].generating = rootNode;
+	}
+
     this.save();
     this.renderViews();
     this.renderSiblingsViews();
 
-    let prompt = this.fullText(state.current, state);
+    let prompt = this.fullText(rootNode, state);
 
 	const completions = await this.complete(prompt);
 	if (!completions) return;
@@ -1264,7 +1283,12 @@ export default class LoomPlugin extends Plugin {
     this.statusBarItem.style.display = "none";
   }
 
-  async canvasComplete() {
+  async canvasComplete(siblings: boolean) {
+	if (siblings) {
+	  new Notice("Not yet supported in canvas view");
+	  return;
+	}
+
 	new Notice("Generating...");
 
 	// @ts-expect-error
@@ -1331,10 +1355,10 @@ export default class LoomPlugin extends Plugin {
 	});
   }
 
-  fullText(id: string, state: NoteState) {
+  fullText(id: string | null, state: NoteState) {
     let text = "";
 
-    let current: string | null = id;
+    let current = id;
     while (current) {
       text = state.nodes[current].text + text;
       current = state.nodes[current].parentId;
