@@ -18,8 +18,6 @@ If you are interested in funding development of Loom(sidian), you can **[support
 
 - generate - `Ctrl+Space`
 - generate siblings - `Ctrl+Shift+Space`
-- create child - `Ctrl+Alt+n`
-- create sibling - `Alt+n`
 - clone (current node) - `Ctrl+Alt+c`
 - split at point - `Alt+c`
 - delete (current node) - `Alt+Backspace`
@@ -29,7 +27,6 @@ Navigation:
 - switch to previous sibling - `Alt+Up`
 - switch to parent - `Alt+Left`
 - switch to (most recently visited) child - `Alt+Right`
-- collapse/expand current node - `Alt+e`
 
 In the editor:
 - `Shift+click` on the text corresponding to a node to switch to it

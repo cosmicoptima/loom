@@ -311,7 +311,6 @@ export default class LoomPlugin extends Plugin {
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:create-child", state.current);
         }),
-      hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "n" }],
     });
 
     this.addCommand({
@@ -322,7 +321,6 @@ export default class LoomPlugin extends Plugin {
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:create-sibling", state.current);
         }),
-      hotkeys: [{ modifiers: ["Alt"], key: "n" }],
     });
 
     this.addCommand({
@@ -497,7 +495,6 @@ export default class LoomPlugin extends Plugin {
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:toggle-collapse", state.current);
         }),
-      hotkeys: [{ modifiers: ["Alt"], key: "e" }],
     });
 
     this.addCommand({
