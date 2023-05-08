@@ -32,6 +32,7 @@
 		"gpt3-tokenizer": "^1.1.5",
 		"openai": "^3.2.0",
 		"untildify": "^4.0.0",
-		"uuid": "^9.0.0"
+		"uuid": "^9.0.0",
+		"vis-network": "^9.1.6"
 	}
 }

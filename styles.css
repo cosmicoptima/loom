@@ -145,6 +145,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0.35em 0 0.35em 0.6em;
+  flex-grow: 1;
 }
 
 .loom-node-bookmark {
