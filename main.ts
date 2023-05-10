@@ -126,6 +126,11 @@ interface NoteState {
   infillMode: boolean;
 }
 
+interface SplitNode {
+  parentId: string | null;
+  childId?: string | null;
+}
+
 export default class LoomPlugin extends Plugin {
   settings: LoomSettings;
   state: Record<string, NoteState>;
@@ -895,21 +900,18 @@ export default class LoomPlugin extends Plugin {
         this.withFile((file) => {
           const split = this.breakAtPoint();
 		  if (!split) return;
-		  const [parentId,] = split;
-
-          if (parentId !== undefined) {
-            const newId = uuidv4();
-            this.state[file.path].nodes[newId] = {
-              text: "",
-              parentId,
-			  parentIds: [parentId],
-              unread: false,
-              collapsed: false,
-              bookmarked: false,
-              color: null,
-            };
-            this.app.workspace.trigger("loom:switch-to", newId);
-          }
+		  const { parentId } = split;
+          const newId = uuidv4();
+          this.state[file.path].nodes[newId] = {
+            text: "",
+            parentId,
+		    parentIds: [parentId],
+            unread: false,
+            collapsed: false,
+            bookmarked: false,
+            color: null,
+          };
+          this.app.workspace.trigger("loom:switch-to", newId);
         })
       )
     );
@@ -1393,7 +1395,9 @@ export default class LoomPlugin extends Plugin {
     let rootNode: string | null, childNode;
     if (type === "siblings") rootNode = state.nodes[state.current].parentId;
     else {
-      [rootNode, childNode] = this.breakAtPoint();
+		const split = this.breakAtPoint();
+		rootNode = split.parentId;
+		childNode = split.childId;
     }
 
     if (rootNode !== null) {
@@ -1408,7 +1412,7 @@ export default class LoomPlugin extends Plugin {
 
 	if (type === "infill") {
       const prefix = this.fullText(rootNode, state);
-	  const suffix = this.fullText(childNode, state).slice(prefix.length);
+	  const suffix = childNode ? this.fullText(childNode, state).slice(prefix.length) : "";
 
 	  const completions = await this.complete(prefix, suffix);
 	  if (!completions) return;
@@ -1425,11 +1429,13 @@ export default class LoomPlugin extends Plugin {
           bookmarked: false,
           color: null,
         };
-		state.nodes[childNode].parentIds = [...state.nodes[childNode].parentIds, id];
+		if (childNode)
+		  state.nodes[childNode].parentIds = [...state.nodes[childNode].parentIds, id];
         ids.push(id);
 	  }
 
-	  state.nodes[childNode].parentIds = state.nodes[childNode].parentIds.filter(id => id !== rootNode);
+	  if (childNode)
+	    state.nodes[childNode].parentIds = state.nodes[childNode].parentIds.filter(id => id !== rootNode);
 	} else {
       const prompt = this.fullText(rootNode, state);
 
@@ -1600,7 +1606,7 @@ export default class LoomPlugin extends Plugin {
     return children[0][0];
   }
 
-  breakAtPoint(): (string | null | undefined)[] | null {
+  breakAtPoint(): SplitNode {
     return this.withFile((file) => {
       // split the current node into:
       //   - parent node with text before cursor
@@ -1636,10 +1642,10 @@ export default class LoomPlugin extends Plugin {
 
       // if cursor is at the beginning of the node, create a sibling TODO ??? wait what
       if (i === 0) {
-        return [undefined, current];
+        return { parentId: family[n - 1], childId: family[n] };
         // if cursor is at the end of the node, create a child
       } else if (end) {
-        return [current, undefined];
+        return { parentId: current };
       }
 
       const inRangeNode = family[n];
@@ -1674,7 +1680,7 @@ export default class LoomPlugin extends Plugin {
       children.forEach((child) => (child.parentId = afterId));
 
       return [inRangeNode, afterId];
-    });
+    }) as SplitNode;
   }
 
   canvasBreakAtPoint(): boolean {
