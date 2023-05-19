@@ -1296,7 +1296,7 @@ export default class LoomPlugin extends Plugin {
     this.renderViews();
     this.renderSiblingsViews();
 
-    let prompt = this.fullText(rootNode, state);
+    let prompt = `<|endoftext|>${this.fullText(rootNode, state)}`;
 
 	const completions = await this.complete(prompt);
 	if (!completions) return;
