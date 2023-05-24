@@ -10,6 +10,7 @@ import {
   Setting,
   TFile,
   WorkspaceLeaf,
+  requestUrl,
   setIcon,
 } from "obsidian";
 import { Range } from "@codemirror/state";
@@ -23,6 +24,7 @@ import {
   ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
+import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAiApi} from "azure-openai";
 import * as cohere from "cohere-ai";
 import * as fs from "fs";
 import GPT3Tokenizer from "gpt3-tokenizer";
@@ -31,15 +33,18 @@ import { v4 as uuidv4 } from "uuid";
 const dialog = require("electron").remote.dialog;
 const untildify = require("untildify") as any;
 
-const tokenizer = new GPT3Tokenizer({ type: "codex" });
+const tokenizer = new GPT3Tokenizer({ type: "codex" }); // TODO depends on model
 
-const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat"];
+const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat"];
 type Provider = (typeof PROVIDERS)[number];
 
 interface LoomSettings {
   openaiApiKey: string;
   cohereApiKey: string;
   textsynthApiKey: string;
+
+  azureApiKey: string;
+  azureEndpoint: string;
 
   ocpApiKey: string;
   ocpUrl: string;
@@ -66,6 +71,9 @@ const DEFAULT_SETTINGS: LoomSettings = {
   openaiApiKey: "",
   cohereApiKey: "",
   textsynthApiKey: "",
+
+  azureApiKey: "",
+  azureEndpoint: "",
 
   ocpApiKey: "",
   ocpUrl: "",
@@ -106,14 +114,10 @@ export default class LoomPlugin extends Plugin {
   state: Record<string, NoteState>;
 
   editor: Editor;
-  // view: LoomView;
   statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
-
-  view(): LoomView {
-    return this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view)[0] as LoomView;
-  }
+  azure: AzureOpenAiApi;
 
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
@@ -121,11 +125,22 @@ export default class LoomPlugin extends Plugin {
     return callback(file);
   }
 
+  renderViews() {
+	const views = this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view) as LoomView[];
+	views.forEach((view) => view.render());
+  }
+
+  renderSiblingsViews() {
+	const views = this.app.workspace.getLeavesOfType("loom-siblings").map((leaf) => leaf.view) as LoomSiblingsView[];
+	views.forEach((view) => view.render());
+  }
+
   thenSaveAndRender(callback: () => void) {
     callback();
 
     this.save();
-    this.view().render();
+    this.renderViews();
+    this.renderSiblingsViews();
   }
 
   wftsar(callback: (file: TFile) => void) {
@@ -145,6 +160,21 @@ export default class LoomPlugin extends Plugin {
     cohere.init(this.settings.cohereApiKey);
   }
 
+  setAzureOpenAI() {
+	if (!this.settings.azureApiKey || !this.settings.azureEndpoint) return;
+
+    const configuration = new AzureConfiguration({
+      apiKey: this.settings.azureApiKey,
+      // add azure info into configuration
+      azure: {
+        apiKey: this.settings.azureApiKey,
+        endpoint: this.settings.azureEndpoint
+     }
+    });
+    this.azure = new AzureOpenAiApi(configuration);
+  }
+
+
   async onload() {
     await this.loadSettings();
     await this.loadState();
@@ -153,98 +183,207 @@ export default class LoomPlugin extends Plugin {
 
     this.setOpenAI();
     this.setCohere();
+    this.setAzureOpenAI();
 
     this.statusBarItem = this.addStatusBarItem();
     this.statusBarItem.setText("Completing...");
     this.statusBarItem.style.display = "none";
 
+    const complete = (checking: boolean, siblings: boolean) => {
+      const file = this.app.workspace.getActiveFile();
+      if (!file) return false;
+	  if (!["md", "canvas"].contains(file.extension)) return false;
+
+      // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
+      if (
+        ["openai", "openai-chat"].includes(this.settings.provider) &&
+        !this.settings.openaiApiKey
+      )
+        return false;
+      if (
+        ["azure", "azure-chat"].includes(this.settings.provider) &&
+        !this.settings.azureApiKey
+      )
+        return false;
+      if (this.settings.provider === "cohere" && !this.settings.cohereApiKey)
+        return false;
+      if (
+        this.settings.provider === "textsynth" &&
+        !this.settings.textsynthApiKey
+      )
+        return false;
+      if (this.settings.provider === "ocp" && !this.settings.ocpApiKey)
+        return false;
+
+      if (!checking) {
+	    if (file.extension === "md")
+	  	  this.mdComplete(file, siblings);
+        else if (file.extension === "canvas")
+	      this.canvasComplete(siblings);
+	  }
+      return true;
+	}
+
     this.addCommand({
-      id: "loom-complete",
+      id: "complete",
       name: "Complete from current point",
       icon: "wand",
-      callback: async () => this.complete(),
+      checkCallback: (checking: boolean) => complete(checking, false),
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
     });
 
-    const withState = (callback: (state: NoteState) => void) => {
-      return this.withFile((file) => {
-        const state = this.state[file.path];
-        if (!state) this.initializeFile(file);
+	this.addCommand({
+	  id: "generate-siblings",
+	  name: "Generate siblings",
+	  icon: "wand",
+	  checkCallback: (checking: boolean) => complete(checking, true),
+	  hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: " " }],
+	});
 
-        callback(state);
-      });
+    const withState = (
+      checking: boolean,
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
+    ) => {
+      const file = this.app.workspace.getActiveFile();
+      if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
+	  if (file.extension !== "md") return false;
+
+      const state = this.state[file.path];
+      if (!state) this.initializeFile(file);
+
+      if (!checking) callback(state);
+      return true;
     };
 
-    const openLoomPane = () => {
+    const withStateAddl = (
+      checking: boolean,
+      checkCallback: (state: NoteState) => boolean,
+      callback: (state: NoteState) => void,
+	  canvasCallback?: () => boolean,
+    ) => {
+      const file = this.app.workspace.getActiveFile();
+      if (!file) return false;
+	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
+	  if (file.extension !== "md") return false;
+
+      const state = this.state[file.path];
+      if (!state) this.initializeFile(file);
+
+      if (!checkCallback(state)) return false;
+
+      if (!checking) callback(state);
+      return true;
+    };
+
+    const openLoomPane = (focus: boolean) => {
       const loomPanes = this.app.workspace.getLeavesOfType("loom");
       try {
         if (loomPanes.length === 0)
-          this.app.workspace.getRightLeaf(false).setViewState({ type: "loom" });
-        else this.app.workspace.revealLeaf(loomPanes[0]);
+          this.app.workspace
+          .getRightLeaf(false)
+          .setViewState({ type: "loom" });
+        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const openLoomSiblingsPane = (focus: boolean) => {
+      const loomPanes = this.app.workspace.getLeavesOfType("loom-siblings");
+      try {
+        if (loomPanes.length === 0)
+          this.app.workspace
+            .getRightLeaf(false)
+            .setViewState({ type: "loom-siblings" });
+        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
       } catch (e) {
         console.error(e);
       }
     };
 
     this.addCommand({
-      id: "loom-create-child",
+      id: "create-child",
       name: "Create child of current node",
       icon: "plus",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:create-child", state.current)
-        ),
-      hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "n" }],
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:create-child", state.current);
+        }),
     });
 
     this.addCommand({
-      id: "loom-create-sibling",
+      id: "create-sibling",
       name: "Create sibling of current node",
       icon: "list-plus",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:create-sibling", state.current)
-        ),
-      hotkeys: [{ modifiers: ["Alt"], key: "n" }],
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:create-sibling", state.current);
+        }),
     });
 
     this.addCommand({
-      id: "loom-clone-current-node",
+      id: "clone-current-node",
       name: "Clone current node",
       icon: "copy",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:clone", state.current)
-        ),
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:clone", state.current);
+        }),
       hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "c" }],
     });
 
     this.addCommand({
-      id: "loom-break-at-point",
-      name: "Branch from current point",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:break-at-point", state.current)
-        ),
+      id: "break-at-point",
+      name: "Split at current point",
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:break-at-point", state.current);
+        }, () => this.canvasBreakAtPoint()),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
     this.addCommand({
-      id: "loom-merge-with-parent",
+      id: "merge-with-parent",
       name: "Merge current node with parent",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:merge-with-parent", state.current)
+      checkCallback: (checking: boolean) =>
+        withStateAddl(
+          checking,
+          (state) => {
+            const parentId = state.nodes[state.current].parentId;
+
+            if (parentId === null) {
+              if (!checking)
+                new Notice("Can't merge a root node with its parent");
+              return false;
+            }
+            if (
+              Object.values(state.nodes).filter((n) => n.parentId === parentId)
+                .length > 1
+            ) {
+              if (!checking)
+                new Notice(
+                  "Can't merge this node with its parent; it has siblings"
+                );
+              return false;
+            }
+
+            return true;
+          },
+          (state) => {
+            this.app.workspace.trigger("loom:merge-with-parent", state.current);
+          }
         ),
-      hotkeys: [{ modifiers: ["Alt"], key: "m" }]
+      hotkeys: [{ modifiers: ["Alt"], key: "m" }],
     });
 
     this.addCommand({
-      id: "loom-switch-to-next-sibling",
+      id: "switch-to-next-sibling",
       name: "Switch to next sibling",
       icon: "arrow-down",
-      callback: () =>
-        withState((state) => {
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
           const nextSibling = this.nextSibling(state.current, state);
           if (nextSibling)
             this.app.workspace.trigger("loom:switch-to", nextSibling);
@@ -253,11 +392,11 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-previous-sibling",
+      id: "switch-to-previous-sibling",
       name: "Switch to previous sibling",
       icon: "arrow-up",
-      callback: () =>
-        withState((state) => {
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
           const prevSibling = this.prevSibling(state.current, state);
           if (prevSibling)
             this.app.workspace.trigger("loom:switch-to", prevSibling);
@@ -266,88 +405,124 @@ export default class LoomPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "loom-switch-to-parent",
+      id: "switch-to-parent",
       name: "Switch to parent",
       icon: "arrow-left",
-      callback: () =>
-        withState((state) => {
-          const parentId = state.nodes[state.current].parentId;
-          if (parentId) this.app.workspace.trigger("loom:switch-to", parentId);
-        }),
+      checkCallback: (checking: boolean) =>
+        withStateAddl(
+          checking,
+          (state) => {
+            return state.nodes[state.current].parentId !== null;
+          },
+          (state) => {
+            const parentId = state.nodes[state.current].parentId;
+            if (parentId)
+              this.app.workspace.trigger("loom:switch-to", parentId);
+          }
+        ),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowLeft" }],
     });
 
     this.addCommand({
-      id: "loom-switch-to-child",
+      id: "switch-to-child",
       name: "Switch to child",
       icon: "arrow-right",
-      callback: () =>
-        withState((state) => {
-          const lastVisitedChild = this.lastVisitedChild(state);
-          if (lastVisitedChild)
-            this.app.workspace.trigger("loom:switch-to", lastVisitedChild);
-        }),
+      checkCallback: (checking: boolean) =>
+        withStateAddl(
+          checking,
+          (state) => {
+            const children = Object.values(state.nodes).filter(
+              (node: Node) => node.parentId === state.current
+            );
+            return children.length > 0;
+          },
+          (state) => {
+            const lastVisitedChild = this.lastVisitedChild(state);
+            if (lastVisitedChild)
+              this.app.workspace.trigger("loom:switch-to", lastVisitedChild);
+          }
+        ),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowRight" }],
     });
 
     this.addCommand({
-      id: "loom-delete-current-node",
+      id: "delete-current-node",
       name: "Delete current node",
       icon: "trash",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:delete", state.current)
+      checkCallback: (checking: boolean) =>
+        withStateAddl(
+          checking,
+          (state) => {
+            const rootNodes = Object.entries(state.nodes).filter(
+              ([, node]) => node.parentId === null
+            );
+            if (rootNodes.length === 1 && rootNodes[0][0] === state.current) {
+              if (!checking) new Notice("The last root node can't be deleted");
+              return false;
+            }
+            return true;
+          },
+          (state) => {
+            this.app.workspace.trigger("loom:delete", state.current);
+          }
         ),
       hotkeys: [{ modifiers: ["Alt"], key: "Backspace" }],
     });
 
     this.addCommand({
-      id: "loom-clear-children",
+      id: "clear-children",
       name: "Delete current node's children",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:clear-children", state.current)
-        ),
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:clear-children", state.current);
+        }),
     });
 
     this.addCommand({
-      id: "loom-clear-siblings",
+      id: "clear-siblings",
       name: "Delete current node's siblings",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:clear-siblings", state.current)
-        ),
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:clear-siblings", state.current);
+        }),
     });
 
     this.addCommand({
-      id: "loom-toggle-collapse-current-node",
+      id: "toggle-collapse-current-node",
       name: "Toggle whether current node is collapsed",
       icon: "folder-up",
-      callback: () =>
-        withState((state) =>
-          this.app.workspace.trigger("loom:toggle-collapse", state.current)
-        ),
-      hotkeys: [{ modifiers: ["Alt"], key: "e" }],
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:toggle-collapse", state.current);
+        }),
     });
 
     this.addCommand({
-      id: "loom-open-pane",
+      id: "open-pane",
       name: "Open Loom pane",
-      callback: openLoomPane,
+      callback: () => openLoomPane(true),
     });
 
     this.addCommand({
-      id: "loom-debug-reset-state",
+      id: "debug-reset-state",
       name: "Debug: Reset state",
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
 
-    const getState = () => this.withFile((file) => this.state[file.path]);
+    const getState = () => this.withFile((file) => {
+	  if (file.extension === "canvas") return "canvas";
+	  return this.state[file.path];
+	});
     const getSettings = () => this.settings;
 
     this.registerView(
       "loom",
       (leaf) => new LoomView(leaf, getState, getSettings)
+    );
+
+    this.registerView(
+      "loom-siblings",
+      (leaf) => new LoomSiblingsView(leaf, getState)
     );
 
     const loomEditorPlugin = ViewPlugin.fromClass(
@@ -356,7 +531,8 @@ export default class LoomPlugin extends Plugin {
     );
     this.registerEditorExtension([loomEditorPlugin]);
 
-    openLoomPane();
+    openLoomPane(true);
+    openLoomSiblingsPane(false);
 
     this.registerEvent(
       this.app.workspace.on(
@@ -430,8 +606,14 @@ export default class LoomPlugin extends Plugin {
             };
 
             const updateDecorations = () => {
-              const nodeLengths = ancestors.map((id) => [id, this.state[view.file.path].nodes[id].text.length]);
-              plugin.state = { nodeLengths, showNodeBorders: this.settings.showNodeBorders };
+              const nodeLengths = ancestors.map((id) => [
+                id,
+                this.state[view.file.path].nodes[id].text.length,
+              ]);
+              plugin.state = {
+                nodeLengths,
+                showNodeBorders: this.settings.showNodeBorders,
+              };
               plugin.update();
             };
 
@@ -637,22 +819,29 @@ export default class LoomPlugin extends Plugin {
             new Notice("Can't merge a root node with its parent");
             return;
           }
-          if (Object.values(state.nodes).filter((n) => n.parentId === parentId).length > 1) {
-            new Notice("Can't merge this node with its parent; it has siblings");
+          if (
+            Object.values(state.nodes).filter((n) => n.parentId === parentId)
+              .length > 1
+          ) {
+            new Notice(
+              "Can't merge this node with its parent; it has siblings"
+            );
             return;
           }
 
           state.nodes[parentId].text += state.nodes[id].text;
 
-          const children = Object.entries(state.nodes).filter(([_, node]) => node.parentId === id);
-          for (const [childId, ] of children)
+          const children = Object.entries(state.nodes).filter(
+            ([_, node]) => node.parentId === id
+          );
+          for (const [childId] of children)
             this.state[file.path].nodes[childId].parentId = parentId;
 
           this.app.workspace.trigger("loom:switch-to", parentId);
           this.app.workspace.trigger("loom:delete", id);
-        }
+        })
       )
-    ));
+    );
 
     this.registerEvent(
       // @ts-expect-error
@@ -670,8 +859,17 @@ export default class LoomPlugin extends Plugin {
             (id_) => id_ !== id
           );
 
-          let fallback = this.nextSibling(id, this.state[file.path]);
-          if (!fallback) fallback = this.state[file.path].nodes[id].parentId;
+		  let fallback
+		  const siblings = Object.entries(this.state[file.path].nodes).filter(
+			([_id, node]) => node.parentId === this.state[file.path].nodes[id].parentId && id !== _id
+		  );
+		  const byLastVisited = siblings.sort(([_, a], [__, b]) => {
+			if (a.lastVisited === undefined) return 1;
+			if (b.lastVisited === undefined) return -1;
+			return b.lastVisited - a.lastVisited;
+		  });
+		  if (byLastVisited.length > 0) fallback = byLastVisited[0][0];
+		  else fallback = this.state[file.path].nodes[id].parentId;
 
           let deleted = [id];
 
@@ -723,23 +921,26 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      // @ts-expect-error
-      this.app.workspace.on("loom:set-setting", (setting: string, value: any) => {
-        this.thenSaveAndRender(
-          () => (this.settings = { ...this.settings, [setting]: value })
-        );
+      this.app.workspace.on(
+        // @ts-expect-error
+        "loom:set-setting",
+        (setting: string, value: any) => {
+          this.thenSaveAndRender(
+            () => (this.settings = { ...this.settings, [setting]: value })
+          );
 
-        if (setting === "showNodeBorders") {
-          // @ts-expect-error
-          const editor = this.editor.cm;
+          if (setting === "showNodeBorders") {
+            // @ts-expect-error
+            const editor = this.editor.cm;
 
-          const plugin = editor.plugin(loomEditorPlugin);
-          plugin.state.showNodeBorders = this.settings.showNodeBorders;
-          plugin.update();
+            const plugin = editor.plugin(loomEditorPlugin);
+            plugin.state.showNodeBorders = this.settings.showNodeBorders;
+            plugin.update();
 
-          editor.focus();
+            editor.focus();
+          }
         }
-      })
+      )
     );
 
     this.registerEvent(
@@ -777,8 +978,10 @@ export default class LoomPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
         if (!file) return;
+		if (file.extension !== "md") return;
 
-        this.view().render();
+        this.renderViews();
+        this.renderSiblingsViews();
 
         this.app.workspace.iterateRootLeaves((leaf) => {
           if (
@@ -807,7 +1010,10 @@ export default class LoomPlugin extends Plugin {
         ancestors = ancestors.reverse();
         const ancestorTexts = ancestors.map((id) => state.nodes[id].text);
 
-        const nodeLengths = ancestors.map((id, i) => [id, ancestorTexts[i].length]);
+        const nodeLengths = ancestors.map((id, i) => [
+          id,
+          ancestorTexts[i].length,
+        ]);
 
         plugin.state = {
           nodeLengths,
@@ -827,7 +1033,10 @@ export default class LoomPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on("resize", () => this.view().render())
+      this.app.workspace.on("resize", () => {
+        this.renderViews();
+        this.renderSiblingsViews();
+      })
     );
 
     this.registerEvent(
@@ -879,23 +1088,8 @@ export default class LoomPlugin extends Plugin {
     this.thenSaveAndRender(() => {});
   }
 
-  async complete() {
-    const file = this.app.workspace.getActiveFile();
-    if (!file) return;
-    // TODO add async support to withFile and wftsar, so `complete` can be wrapped
-
+  async complete(prompt: string) {
     this.statusBarItem.style.display = "inline-flex";
-
-    const state = this.state[file.path];
-
-    this.breakAtPoint();
-    this.app.workspace.trigger("loom:switch-to", state.current);
-
-    this.state[file.path].generating = state.current;
-    this.save();
-    this.view().render();
-
-    let prompt = this.fullText(state.current, state);
 
     // remove a trailing space if there is one
     // store whether there was, so it can be added back post-completion
@@ -903,7 +1097,9 @@ export default class LoomPlugin extends Plugin {
     prompt = prompt.replace(/\s+$/, "");
 
     // replace "\<" with "<", because obsidian tries to render html tags
+	// and "\[" with "["
     prompt = prompt.replace(/\\</g, "<");
+	prompt = prompt.replace(/\\\[/g, "[");
 
     // trim to last 8000 tokens, the maximum allowed by openai
     const bpe = tokenizer.encode(prompt).bpe;
@@ -914,10 +1110,10 @@ export default class LoomPlugin extends Plugin {
     prompt = tokenizer.decode(tokens);
 
     // complete, or visually display an error and return if that fails
-    let completions;
+    let rawCompletions;
     try {
       if (this.settings.provider === "openai-chat") {
-        completions = (
+        rawCompletions = (
           await this.openai.createChatCompletion({
             model: this.settings.model,
             messages: [{ role: "assistant", content: prompt }],
@@ -928,8 +1124,30 @@ export default class LoomPlugin extends Plugin {
           })
         ).data.choices.map((choice) => choice.message?.content);
       } else if (this.settings.provider === "openai") {
-        completions = (
+        rawCompletions = (
           await this.openai.createCompletion({
+            model: this.settings.model,
+            prompt,
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+            top_p: this.settings.topP,
+          })
+        ).data.choices.map((choice) => choice.text);
+      } else if (this.settings.provider === "azure-chat") {
+        rawCompletions = (
+          await this.azure.createChatCompletion({
+            model: this.settings.model,
+            messages: [{ role: "assistant", content: prompt }],
+            max_tokens: this.settings.maxTokens,
+            n: this.settings.n,
+            temperature: this.settings.temperature,
+            top_p: this.settings.topP,
+          })
+        ).data.choices.map((choice) => choice.message?.content);
+      } else if (this.settings.provider === "azure") {
+        rawCompletions = (
+          await this.azure.createCompletion({
             model: this.settings.model,
             prompt,
             max_tokens: this.settings.maxTokens,
@@ -940,17 +1158,11 @@ export default class LoomPlugin extends Plugin {
         ).data.choices.map((choice) => choice.text);
       }
     } catch (e) {
-      if (
-        e.response.status === 401 &&
-        ["openai", "openai-chat"].includes(this.settings.provider)
-      )
+      if (e.response.status === 401)
         new Notice(
           "OpenAI API key is invalid. Please provide a valid key in the settings."
         );
-      else if (
-        e.response.status === 429 &&
-        ["openai", "openai-chat"].includes(this.settings.provider)
-      )
+      else if (e.response.status === 429)
         new Notice("OpenAI API rate limit exceeded.");
       else new Notice("Unknown API error: " + e.response.data.error.message);
 
@@ -975,17 +1187,18 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = response.body.generations.map(
+      rawCompletions = response.body.generations.map(
         (generation) => generation.text
       );
     } else if (this.settings.provider === "textsynth") {
-      // TextSynth API doesn't have CORS enabled, so we have to proxy
-      const response = await fetch("https://celeste.exposed/api/textsynth", {
+      const response = await requestUrl({
+        url: `https://api.textsynth.com/v1/engines/${this.settings.model}/completions`,
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.settings.textsynthApiKey}`,
+        },
         body: JSON.stringify({
-          api_key: this.settings.textsynthApiKey,
-          model: this.settings.model,
           prompt,
           max_tokens: this.settings.maxTokens,
           n: this.settings.n,
@@ -1001,18 +1214,19 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      if (this.settings.n === 1)
-        completions = [(await response.json()).response.text];
-      else completions = (await response.json()).response.text;
+      if (this.settings.n === 1) rawCompletions = [response.json.text];
+      else rawCompletions = response.json.text;
     } else if (this.settings.provider === "ocp") {
       let url = this.settings.ocpUrl;
 
       if (!(url.startsWith("http://") || url.startsWith("https://")))
         url = "https://" + url;
       if (!url.endsWith("/")) url += "/";
+	  url = url.replace(/v1\//, "");
       url += "v1/completions";
 
-      const response = await fetch(url, {
+      const response = await requestUrl({
+		url,
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.settings.ocpApiKey}`,
@@ -1032,33 +1246,68 @@ export default class LoomPlugin extends Plugin {
         this.statusBarItem.style.display = "none";
         return;
       }
-      completions = (await response.json()).choices.map(
+      rawCompletions = response.json.choices.map(
         (choice: any) => choice.text
       );
     }
 
-    if (completions === undefined) {
+    if (rawCompletions === undefined) {
       new Notice("Invalid provider: " + this.settings.provider);
 
       this.statusBarItem.style.display = "none";
       return;
     }
 
-    // create a child node to the current node for each completion
-    let ids = [];
-    for (let completion of completions) {
+    let completions = [];
+    for (let completion of rawCompletions) {
       if (!completion) completion = ""; // empty completions are null, apparently
       completion = completion.replace(/</g, "\\<"); // escape < for obsidian
+	  completion = completion.replace(/\[/g, "\\["); // escape [ for obsidian
 
-      if (this.settings.provider === "openai-chat") {
+      if (["azure-chat", "openai-chat"].includes(this.settings.provider))  {
         if (!trailingSpace) completion = " " + completion;
       } else if (trailingSpace && completion[0] === " ")
         completion = completion.slice(1);
+	
+	  completions.push(completion);
+	}
 
+	this.statusBarItem.style.display = "none";
+	return completions;
+  }
+
+  async mdComplete(file: TFile, siblings: boolean) {
+    const state = this.state[file.path];
+
+	let rootNode
+	if (siblings)
+      rootNode = state.nodes[state.current].parentId;
+	else {
+      this.breakAtPoint();
+	  rootNode = state.current;
+	}
+
+	if (rootNode !== null) {
+      this.app.workspace.trigger("loom:switch-to", rootNode);
+      this.state[file.path].generating = rootNode;
+	}
+
+    this.save();
+    this.renderViews();
+    this.renderSiblingsViews();
+
+    let prompt = `<|endoftext|>${this.fullText(rootNode, state)}`;
+
+	const completions = await this.complete(prompt);
+	if (!completions) return;
+
+    // create a child node to the current node for each completion
+    let ids = [];
+    for (let completion of completions) {
       const id = uuidv4();
       state.nodes[id] = {
         text: completion,
-        parentId: state.current,
+        parentId: state.generating,
         unread: true,
         collapsed: false,
         bookmarked: false,
@@ -1072,15 +1321,88 @@ export default class LoomPlugin extends Plugin {
 
     this.state[file.path].generating = null;
     this.save();
-    this.view().render();
+    this.renderViews();
+    this.renderSiblingsViews();
 
     this.statusBarItem.style.display = "none";
   }
 
-  fullText(id: string, state: NoteState) {
+  async canvasComplete(siblings: boolean) {
+	if (siblings) {
+	  new Notice("Not yet supported in canvas view");
+	  return;
+	}
+
+	new Notice("Generating...");
+
+	// @ts-expect-error
+	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
+	
+    const onlySetMember = (set: Set<unknown>) => {
+      if (set.size !== 1) {
+		new Notice("Node has multiple parents");
+		throw new Error("Set has more than one member");
+	  }
+	  return set.values().next().value;
+	}
+
+	canvas.selection.forEach(async (node: any) => {
+	  let text
+	  let childNodes: any[] = [];
+
+	  if (node.isEditing) {
+        const editor = node.child.editor;
+	    const editorValue = editor.getValue();
+	    const lines = editorValue.split("\n");
+	    const cursor = editor.getCursor();
+
+        text = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+		editor.setValue(text);
+        const after = editorValue.slice(text.length);
+		const childNode = await this.canvasCreateChildNode(canvas, node, after);
+		childNodes.push(childNode.id);
+	  } else text = node.text;
+	  let currentNode = canvas.edgeTo.data.get(node);
+	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
+	  while (currentNode) {
+		text = currentNode.text + text;
+		currentNode = canvas.edgeTo.data.get(currentNode);
+		if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
+	  }
+
+	  const completions = await this.complete(text);
+	  if (!completions) return;
+
+	  for (let i = 0; i < completions.length; i++) {
+		const completion = completions[i];
+		const childNode = await this.canvasCreateChildNode(canvas, node, completion);
+		childNodes.push(childNode.id);
+	  }
+
+	  // adjust the y positions of the child nodes
+	  const data = canvas.getData();
+	  const reversedNodes = [...data.nodes].reverse();
+	  let y = node.y;
+	  canvas.importData({
+		edges: data.edges,
+		nodes: reversedNodes.map((node: any) => {
+		  if (childNodes.includes(node.id)) {
+			node.y = y;
+			y += node.height + 50;
+		  }
+		  return node;
+		}
+	  )});
+
+	  canvas.deselectAll();
+	  childNodes.forEach((id: string) => canvas.select(canvas.nodes.get(id)));
+	});
+  }
+
+  fullText(id: string | null, state: NoteState) {
     let text = "";
 
-    let current: string | null = id;
+    let current = id;
     while (current) {
       text = state.nodes[current].text + text;
       current = state.nodes[current].parentId;
@@ -1215,6 +1537,67 @@ export default class LoomPlugin extends Plugin {
     });
   }
 
+  canvasBreakAtPoint(): boolean {
+	const view = this.app.workspace.getActiveViewOfType(ItemView);
+	if (!view) return false;
+	// @ts-expect-error
+	const canvas = view.canvas;
+
+	canvas.selection.forEach((node: any) => {
+	  if (!node.isEditing) return;
+
+      const editor = node.child.editor;
+	  const text = editor.getValue();
+	  const lines = text.split("\n");
+	  const cursor = editor.getCursor();
+
+      const before = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
+      const after = text.slice(before.length);
+
+	  editor.setValue(before);
+	  editor.setCursor({line: cursor.line, ch: cursor.ch - 1});
+
+	  this.canvasCreateChildNode(canvas, node, after);
+	});
+
+	return true;
+  }
+
+  async canvasCreateChildNode(canvas: any, node: any, childText: string) {
+    const childNode = canvas.createTextNode({
+	  pos: { x: node.x + node.width + 50, y: node.y },
+	  size: { width: 300, height: 100 },
+	  text: childText,
+	  save: true,
+	  focus: false,
+	});
+
+	const data = canvas.getData();
+	canvas.importData({
+	  edges: [...data.edges, { id: uuidv4(), fromNode: node.id, fromSide: "right", toNode: childNode.id, toSide: "left" }],
+	  nodes: data.nodes,
+	});
+	canvas.requestFrame();
+
+	await new Promise(r => setTimeout(r, 50)); // wait for the element to render
+
+	const element = childNode.nodeEl;
+	const sizer = element.querySelector(".markdown-preview-sizer");
+	const height = sizer.getBoundingClientRect().height;
+
+	const data_ = canvas.getData();
+	canvas.importData({
+	  edges: data_.edges,
+	  nodes: data_.nodes.map((node: any) => {
+		if (node.id === childNode.id) node.height = height / canvas.scale + 52;
+		return node;
+	  }
+	)});
+	canvas.requestFrame();
+
+	return childNode;
+  }
+
   async loadSettings() {
     const settings = (await this.loadData())?.settings || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
@@ -1227,17 +1610,18 @@ export default class LoomPlugin extends Plugin {
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
     this.setOpenAI();
+    this.setAzureOpenAI();
     this.setCohere();
   }
 }
 
 class LoomView extends ItemView {
-  getNoteState: () => NoteState | null;
+  getNoteState: () => NoteState | "canvas" | null;
   getSettings: () => LoomSettings;
 
   constructor(
     leaf: WorkspaceLeaf,
-    getNoteState: () => NoteState | null,
+    getNoteState: () => NoteState | "canvas" | null,
     getSettings: () => LoomSettings
   ) {
     super(leaf);
@@ -1252,7 +1636,7 @@ class LoomView extends ItemView {
     const settings = this.getSettings();
 
     // get scroll position, which will be restored at the end
-    const scroll = (this.containerEl as HTMLElement).scrollTop;
+    const scroll = this.containerEl.scrollTop;
 
     this.containerEl.empty();
     this.containerEl.addClass("loom");
@@ -1292,45 +1676,47 @@ class LoomView extends ItemView {
       "Show node borders in the editor"
     );
 
-    const importFileInput = navButtonsContainer.createEl("input", {
-      cls: "hidden",
-      attr: { type: "file", id: "loom-import" },
-    });
-    const importNavButton = navButtonsContainer.createEl("label", {
-      cls: "clickable-icon nav-action-button",
-      attr: { "aria-label": "Import JSON", for: "loom-import" },
-    });
-    setIcon(importNavButton, "import");
-    importFileInput.addEventListener("change", () =>
-      // @ts-expect-error
-      this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
-    );
+	if (state !== "canvas") {
+      const importFileInput = navButtonsContainer.createEl("input", {
+        cls: "hidden",
+        attr: { type: "file", id: "loom-import" },
+      });
+      const importNavButton = navButtonsContainer.createEl("label", {
+        cls: "clickable-icon nav-action-button",
+        attr: { "aria-label": "Import JSON", for: "loom-import" },
+      });
+      setIcon(importNavButton, "import");
+      importFileInput.addEventListener("change", () =>
+        // @ts-expect-error
+        this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
+      );
 
-    const exportNavButton = navButtonsContainer.createDiv({
-      cls: `clickable-icon nav-action-button${
-        settings.showExport ? " is-active" : ""
-      }`,
-      attr: { "aria-label": "Export to JSON" },
-    });
-    setIcon(exportNavButton, "download");
-    exportNavButton.addEventListener("click", (e) => {
-      if (e.shiftKey)
-        this.app.workspace.trigger(
-          "loom:set-setting",
-          "showExport",
-          !settings.showExport
-        );
-      else
-        dialog
-          .showSaveDialog({
-            title: "Export to JSON",
-            filters: [{ extensions: ["json"] }],
-          })
-          .then((result: any) => {
-            if (result)
-              this.app.workspace.trigger("loom:export", result.filePath);
-          });
-    });
+      const exportNavButton = navButtonsContainer.createDiv({
+        cls: `clickable-icon nav-action-button${
+          settings.showExport ? " is-active" : ""
+        }`,
+        attr: { "aria-label": "Export to JSON" },
+      });
+      setIcon(exportNavButton, "download");
+      exportNavButton.addEventListener("click", (e) => {
+        if (e.shiftKey)
+          this.app.workspace.trigger(
+            "loom:set-setting",
+            "showExport",
+            !settings.showExport
+          );
+        else
+          dialog
+            .showSaveDialog({
+              title: "Export to JSON",
+              filters: [{ extensions: ["json"] }],
+            })
+            .then((result: any) => {
+              if (result)
+                this.app.workspace.trigger("loom:export", result.filePath);
+            });
+      });
+	}
 
     // create the main container, which uses the `outline` class, which has
     // a margin visually consistent with other panes
@@ -1393,6 +1779,8 @@ class LoomView extends ItemView {
       { name: "OpenAI code-davinci-002 proxy", value: "ocp" },
       { name: "OpenAI (Completion)", value: "openai" },
       { name: "OpenAI (Chat)", value: "openai-chat" },
+      { name: "Azure (Completion)", value: "azure" },
+      { name: "Azure (Chat)", value: "azure-chat" },
     ];
     providerOptions.forEach((option) => {
       const optionEl = providerSelect.createEl("option", {
@@ -1460,6 +1848,13 @@ class LoomView extends ItemView {
       });
       return;
     }
+	if (state === "canvas") {
+	  container.createEl("div", {
+		cls: "pane-empty",
+		text: "The selected note is a canvas.",
+	  });
+	  return;
+	}
 
     const nodes = Object.entries(state.nodes);
 
@@ -1472,7 +1867,7 @@ class LoomView extends ItemView {
       node: Node,
       id: string,
       container: HTMLElement,
-      children: boolean
+      main: boolean
     ) => {
       // div for the node and its children
       const nodeDiv = container.createDiv({});
@@ -1484,13 +1879,13 @@ class LoomView extends ItemView {
         }${id === state.current ? " is-active" : ""}${
           node.color ? ` loom-node-${node.color}` : ""
         }`,
-        attr: { id: `loom-node-${id}` },
+        attr: main ? { id: `loom-node-${id}` } : {},
       });
 
       // an expand/collapse button if the node has children
       const hasChildren =
         nodes.filter(([, node]) => node.parentId === id).length > 0;
-      if (children && hasChildren) {
+      if (main && hasChildren) {
         const collapseDiv = itemDiv.createDiv({
           cls: `collapse-icon loom-collapse${
             node.collapsed ? " is-collapsed" : ""
@@ -1512,9 +1907,9 @@ class LoomView extends ItemView {
       if (node.unread) itemDiv.createDiv({ cls: "loom-node-unread-indicator" });
 
       // the node's text
-      const nodeText = itemDiv.createEl(node.text ? "span" : "em", {
+      const nodeText = itemDiv.createEl(node.text.trim() ? "span" : "em", {
         cls: "loom-node-inner tree-item-inner",
-        text: node.text || "No text",
+        text: node.text.trim() || "No text",
       });
       nodeText.addEventListener("click", () =>
         this.app.workspace.trigger("loom:switch-to", id)
@@ -1634,7 +2029,9 @@ class LoomView extends ItemView {
           menu.addItem((item) => {
             item.setTitle("Merge with parent");
             item.setIcon("arrow-up-left");
-            item.onClick(() => this.app.workspace.trigger("loom:merge-with-parent", id));
+            item.onClick(() =>
+              this.app.workspace.trigger("loom:merge-with-parent", id)
+            );
           });
         }
 
@@ -1682,7 +2079,7 @@ class LoomView extends ItemView {
         );
 
       // indicate if the node is generating children
-      if (state.generating === id) {
+      if (state.generating === id && main) {
         const generatingDiv = nodeDiv.createDiv({ cls: "loom-node-footer" });
         const generatingIcon = generatingDiv.createDiv({ cls: "rotating" });
         setIcon(generatingIcon, "loader-2");
@@ -1693,7 +2090,7 @@ class LoomView extends ItemView {
       }
 
       // render children if the node is not collapsed
-      if (children && !node.collapsed) {
+      if (main && !node.collapsed) {
         const hasChildren =
           nodes.filter(([, node]) => node.parentId === id).length > 0;
         if (nodeDiv.offsetWidth < 150 && hasChildren) {
@@ -1788,6 +2185,89 @@ class LoomView extends ItemView {
   }
 }
 
+class LoomSiblingsView extends ItemView {
+  getNoteState: () => NoteState | "canvas" | null;
+
+  constructor(leaf: WorkspaceLeaf, getNoteState: () => NoteState | "canvas" | null) {
+    super(leaf);
+    this.getNoteState = getNoteState;
+    this.render();
+  }
+
+  render() {
+    const scroll = this.containerEl.scrollTop;
+
+    this.containerEl.empty();
+    this.containerEl.addClass("loom");
+    const outline = this.containerEl.createDiv({ cls: "outline" });
+
+    const state = this.getNoteState();
+
+    if (!state) {
+      outline.createEl("div", {
+        text: "No note selected.",
+        cls: "pane-empty",
+      });
+      return;
+    }
+	if (state === "canvas") {
+	  outline.createEl("div", {
+		text: "The selected note is a canvas.",
+		cls: "pane-empty",
+	  });
+	  return;
+	}
+
+    const parentId = state.nodes[state.current].parentId;
+    const siblings = Object.entries(state.nodes).filter(
+      ([, node]) => node.parentId === parentId
+    );
+
+    let currentDiv;
+    for (const i in siblings) {
+      const [id, node] = siblings[i];
+
+      const siblingDiv = outline.createEl("div", {
+        cls: `loom-sibling${id === state.current ? " is-active" : ""}`,
+      });
+      if (parentId !== null)
+        siblingDiv.createEl("span", {
+          text: "…",
+          cls: "loom-sibling-ellipsis",
+        });
+      siblingDiv.createEl("span", { text: node.text.trim() });
+      siblingDiv.addEventListener("click", () =>
+        this.app.workspace.trigger("loom:switch-to", id)
+      );
+
+      if (parseInt(i) !== siblings.length - 1)
+        outline.createEl("hr", { cls: "loom-sibling-divider" });
+
+      if (id === state.current) currentDiv = siblingDiv;
+    }
+
+    this.containerEl.scrollTop = scroll;
+
+    if (currentDiv) {
+      const rect = currentDiv.getBoundingClientRect();
+      if (rect.top < 25 || rect.bottom > this.containerEl.clientHeight)
+        currentDiv.scrollIntoView();
+    }
+  }
+
+  getViewType(): string {
+    return "loom-siblings";
+  }
+
+  getDisplayText(): string {
+    return "Siblings";
+  }
+
+  getIcon(): string {
+    return "layout-list";
+  }
+}
+
 interface LoomEditorPluginState {
   nodeLengths: [string, number][];
   showNodeBorders: boolean;
@@ -1846,7 +2326,9 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       if (!target.classList.contains("loom-bct")) return false;
 
       const className = target.classList[target.classList.length - 1];
-      for (const el of [].slice.call(document.getElementsByClassName(className)))
+      for (const el of [].slice.call(
+        document.getElementsByClassName(className)
+      ))
         el.classList.add("loom-bct-hover");
 
       return true;
@@ -1858,7 +2340,9 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       if (!target.classList.contains("loom-bct")) return false;
 
       const className = target.classList[target.classList.length - 1];
-      for (const el of [].slice.call(document.getElementsByClassName(className)))
+      for (const el of [].slice.call(
+        document.getElementsByClassName(className)
+      ))
         el.classList.remove("loom-bct-hover");
 
       return true;
@@ -1875,7 +2359,7 @@ const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       app.workspace.trigger("loom:switch-to", id);
 
       return true;
-    }
+    },
   },
 };
 
@@ -1886,7 +2370,9 @@ class LoomBorderWidget extends WidgetType {
     return el;
   }
 
-  eq() { return true; }
+  eq() {
+    return true;
+  }
 }
 
 class LoomSettingTab extends PluginSettingTab {
@@ -1926,6 +2412,8 @@ class LoomSettingTab extends PluginSettingTab {
       dropdown.addOption("ocp", "OpenAI code-davinci-002 proxy");
       dropdown.addOption("openai", "OpenAI (Completion)");
       dropdown.addOption("openai-chat", "OpenAI (Chat)");
+      dropdown.addOption("azure", "Azure (Completion)");
+      dropdown.addOption("azure-chat", "Azure (Chat)");
       dropdown.setValue(this.plugin.settings.provider);
       dropdown.onChange(async (value) => {
         if (PROVIDERS.find((provider) => provider === value))
@@ -1963,6 +2451,18 @@ class LoomSettingTab extends PluginSettingTab {
       );
 
     apiKeySetting("OpenAI", "openaiApiKey");
+    apiKeySetting("Azure", "azureApiKey")
+
+    new Setting(containerEl)
+        .setName("Azure resource endpoint")
+        .setDesc("Required if using Azure")
+        .addText((text) =>
+            text.setValue(this.plugin.settings.azureEndpoint).onChange(async (value) => {
+              this.plugin.settings.azureEndpoint = value;
+              await this.plugin.save();
+            })
+        );
+          
 
     // TODO: reduce duplication of other settings
 
