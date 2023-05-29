@@ -24,11 +24,13 @@ import {
   ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAiApi} from "azure-openai";
-import * as cohere from "cohere-ai";
-import * as fs from "fs";
-import GPT3Tokenizer from "gpt3-tokenizer";
+
+import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAIApi} from "azure-openai";
 import { Configuration, OpenAIApi } from "openai";
+import * as cohere from "cohere-ai";
+import GPT3Tokenizer from "gpt3-tokenizer";
+
+import * as fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 const dialog = require("electron").remote.dialog;
 const untildify = require("untildify") as any;
@@ -61,7 +63,7 @@ interface LoomSettings {
   showExport: boolean;
 }
 
-type LSStringProperty = keyof {
+type LoomSettingKey = keyof {
   [K in keyof LoomSettings as LoomSettings[K] extends string
     ? K
     : never]: LoomSettings[K];
@@ -78,8 +80,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
   ocpApiKey: "",
   ocpUrl: "",
 
-  provider: "cohere",
-  model: "xlarge",
+  provider: "ocp",
+  model: "code-davinci-002",
   maxTokens: 60,
   temperature: 1,
   topP: 1,
@@ -95,11 +97,11 @@ type Color = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
 interface Node {
   text: string;
   parentId: string | null;
-  unread: boolean;
-  lastVisited?: number;
   collapsed: boolean;
+  unread: boolean;
   bookmarked: boolean;
   color: Color;
+  lastVisited?: number;
 }
 
 interface NoteState {
@@ -117,7 +119,7 @@ export default class LoomPlugin extends Plugin {
   statusBarItem: HTMLElement;
 
   openai: OpenAIApi;
-  azure: AzureOpenAiApi;
+  azure: AzureOpenAIApi;
 
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
@@ -135,12 +137,15 @@ export default class LoomPlugin extends Plugin {
 	views.forEach((view) => view.render());
   }
 
+  saveAndRender() {
+	this.save();
+	this.renderViews();
+	this.renderSiblingsViews();
+  }
+
   thenSaveAndRender(callback: () => void) {
     callback();
-
-    this.save();
-    this.renderViews();
-    this.renderSiblingsViews();
+	this.saveAndRender();
   }
 
   wftsar(callback: (file: TFile) => void) {
@@ -149,31 +154,29 @@ export default class LoomPlugin extends Plugin {
     });
   }
 
-  setOpenAI() {
-    const configuration = new Configuration({
-      apiKey: this.settings.openaiApiKey,
-    });
-    this.openai = new OpenAIApi(configuration);
-  }
+  initializeProviders() {
+	this.openai = new OpenAIApi(new Configuration({ apiKey: this.settings.openaiApiKey }));
 
-  setCohere() {
-    cohere.init(this.settings.cohereApiKey);
-  }
+	cohere.init(this.settings.cohereApiKey);
 
-  setAzureOpenAI() {
 	if (!this.settings.azureApiKey || !this.settings.azureEndpoint) return;
-
-    const configuration = new AzureConfiguration({
-      apiKey: this.settings.azureApiKey,
-      // add azure info into configuration
-      azure: {
-        apiKey: this.settings.azureApiKey,
-        endpoint: this.settings.azureEndpoint
-     }
-    });
-    this.azure = new AzureOpenAiApi(configuration);
+	this.azure = new AzureOpenAIApi(new AzureConfiguration({
+	  apiKey: this.settings.azureApiKey,
+	  azure: {
+		apiKey: this.settings.azureApiKey,
+		endpoint: this.settings.azureEndpoint,
+	  },
+	}));
   }
 
+  apiKeySet() {
+    if (["openai", "openai-chat"].includes(this.settings.provider)) return !!this.settings.openaiApiKey;
+	if (["azure", "azure-chat"].includes(this.settings.provider)) return !!this.settings.azureApiKey;
+	if (this.settings.provider === "cohere") return !!this.settings.cohereApiKey;
+	if (this.settings.provider === "textsynth") return !!this.settings.textsynthApiKey;
+	if (this.settings.provider === "ocp") return !!this.settings.ocpApiKey;
+	throw new Error(`Unknown provider ${this.settings.provider}`);
+  }
 
   async onload() {
     await this.loadSettings();
@@ -181,95 +184,56 @@ export default class LoomPlugin extends Plugin {
 
     this.addSettingTab(new LoomSettingTab(this.app, this));
 
-    this.setOpenAI();
-    this.setCohere();
-    this.setAzureOpenAI();
+	this.initializeProviders();
 
     this.statusBarItem = this.addStatusBarItem();
     this.statusBarItem.setText("Completing...");
     this.statusBarItem.style.display = "none";
 
-    const complete = (checking: boolean, siblings: boolean) => {
+    const completeCallback = (checking: boolean, callback: (file: TFile) => Promise<void>) => {
       const file = this.app.workspace.getActiveFile();
-      if (!file) return false;
-	  if (!["md", "canvas"].contains(file.extension)) return false;
+      if (!file || file.extension !== "md") return;
 
-      // only check if api keys are set, not if they're valid, because that sometimes requires additional api calls
-      if (
-        ["openai", "openai-chat"].includes(this.settings.provider) &&
-        !this.settings.openaiApiKey
-      )
-        return false;
-      if (
-        ["azure", "azure-chat"].includes(this.settings.provider) &&
-        !this.settings.azureApiKey
-      )
-        return false;
-      if (this.settings.provider === "cohere" && !this.settings.cohereApiKey)
-        return false;
-      if (
-        this.settings.provider === "textsynth" &&
-        !this.settings.textsynthApiKey
-      )
-        return false;
-      if (this.settings.provider === "ocp" && !this.settings.ocpApiKey)
-        return false;
-
-      if (!checking) {
-	    if (file.extension === "md")
-	  	  this.mdComplete(file, siblings);
-        else if (file.extension === "canvas")
-	      this.canvasComplete(siblings);
-	  }
-      return true;
+	  if (!this.apiKeySet()) return false;
+	  if (!checking) callback(file);
+	  return true;
 	}
 
     this.addCommand({
       id: "complete",
       name: "Complete from current point",
-      icon: "wand",
-      checkCallback: (checking: boolean) => complete(checking, false),
+      checkCallback: (checking: boolean) => completeCallback(checking, this.complete.bind(this)),
       hotkeys: [{ modifiers: ["Ctrl"], key: " " }],
     });
 
 	this.addCommand({
 	  id: "generate-siblings",
-	  name: "Generate siblings",
-	  icon: "wand",
-	  checkCallback: (checking: boolean) => complete(checking, true),
+	  name: "Generate siblings of the current node",
+	  checkCallback: (checking: boolean) => completeCallback(checking, this.generateSiblings.bind(this)),
 	  hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: " " }],
 	});
 
-    const withState = (
-      checking: boolean,
-      callback: (state: NoteState) => void,
-	  canvasCallback?: () => boolean,
-    ) => {
+    const withState = (checking: boolean, callback: (state: NoteState) => void) => {
       const file = this.app.workspace.getActiveFile();
-      if (!file) return false;
-	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
-	  if (file.extension !== "md") return false;
+      if (!file || file.extension !== "md") return false;
 
       const state = this.state[file.path];
-      if (!state) this.initializeFile(file);
+      if (!state) this.initializeNote(file);
 
       if (!checking) callback(state);
       return true;
     };
 
-    const withStateAddl = (
+    const withStateChecked = (
       checking: boolean,
       checkCallback: (state: NoteState) => boolean,
       callback: (state: NoteState) => void,
-	  canvasCallback?: () => boolean,
     ) => {
       const file = this.app.workspace.getActiveFile();
-      if (!file) return false;
-	  if (file.extension === "canvas" && canvasCallback) return canvasCallback();
-	  if (file.extension !== "md") return false;
+      if (!file || file.extension !== "md") return false;
 
       const state = this.state[file.path];
-      if (!state) this.initializeFile(file);
+      if (!state) this.initializeNote(file);
 
       if (!checkCallback(state)) return false;
 
@@ -340,7 +304,7 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:break-at-point", state.current);
-        }, () => this.canvasBreakAtPoint()),
+        }),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
@@ -348,7 +312,7 @@ export default class LoomPlugin extends Plugin {
       id: "merge-with-parent",
       name: "Merge current node with parent",
       checkCallback: (checking: boolean) =>
-        withStateAddl(
+        withStateChecked(
           checking,
           (state) => {
             const parentId = state.nodes[state.current].parentId;
@@ -409,7 +373,7 @@ export default class LoomPlugin extends Plugin {
       name: "Switch to parent",
       icon: "arrow-left",
       checkCallback: (checking: boolean) =>
-        withStateAddl(
+        withStateChecked(
           checking,
           (state) => {
             return state.nodes[state.current].parentId !== null;
@@ -428,7 +392,7 @@ export default class LoomPlugin extends Plugin {
       name: "Switch to child",
       icon: "arrow-right",
       checkCallback: (checking: boolean) =>
-        withStateAddl(
+        withStateChecked(
           checking,
           (state) => {
             const children = Object.values(state.nodes).filter(
@@ -450,7 +414,7 @@ export default class LoomPlugin extends Plugin {
       name: "Delete current node",
       icon: "trash",
       checkCallback: (checking: boolean) =>
-        withStateAddl(
+        withStateChecked(
           checking,
           (state) => {
             const rootNodes = Object.entries(state.nodes).filter(
@@ -992,7 +956,7 @@ export default class LoomPlugin extends Plugin {
         });
 
         if (!this.state[file.path]) {
-          this.initializeFile(file);
+          this.initializeNote(file);
         }
 
         // @ts-expect-error
@@ -1065,7 +1029,7 @@ export default class LoomPlugin extends Plugin {
     );
   }
 
-  initializeFile(file: TFile) {
+  initializeNote(file: TFile) {
     // coerce to NoteState because `current` will be defined
     this.state[file.path] = {
       hoisted: [] as string[],
@@ -1088,7 +1052,7 @@ export default class LoomPlugin extends Plugin {
     this.thenSaveAndRender(() => {});
   }
 
-  async complete(prompt: string) {
+  async completeInner(prompt: string) {
     this.statusBarItem.style.display = "inline-flex";
 
     // remove a trailing space if there is one
@@ -1276,29 +1240,30 @@ export default class LoomPlugin extends Plugin {
 	return completions;
   }
 
-  async mdComplete(file: TFile, siblings: boolean) {
-    const state = this.state[file.path];
+  async complete(file: TFile) {
+	const state = this.state[file.path];
+	this.breakAtPoint();
+	await this.generate(file, state.current);
+  }
 
-	let rootNode
-	if (siblings)
-      rootNode = state.nodes[state.current].parentId;
-	else {
-      this.breakAtPoint();
-	  rootNode = state.current;
-	}
+  async generateSiblings(file: TFile) {
+	const state = this.state[file.path];
+	await this.generate(file, state.nodes[state.current].parentId);
+  }
+
+  async generate(file: TFile, rootNode: string | null) {
+    const state = this.state[file.path];
 
 	if (rootNode !== null) {
       this.app.workspace.trigger("loom:switch-to", rootNode);
       this.state[file.path].generating = rootNode;
 	}
 
-    this.save();
-    this.renderViews();
-    this.renderSiblingsViews();
+    this.saveAndRender();
 
     let prompt = `<|endoftext|>${this.fullText(rootNode, state)}`;
 
-	const completions = await this.complete(prompt);
+	const completions = await this.completeInner(prompt);
 	if (!completions) return;
 
     // create a child node to the current node for each completion
@@ -1320,83 +1285,9 @@ export default class LoomPlugin extends Plugin {
     this.app.workspace.trigger("loom:switch-to", ids[0]);
 
     this.state[file.path].generating = null;
-    this.save();
-    this.renderViews();
-    this.renderSiblingsViews();
+    this.saveAndRender();
 
     this.statusBarItem.style.display = "none";
-  }
-
-  async canvasComplete(siblings: boolean) {
-	if (siblings) {
-	  new Notice("Not yet supported in canvas view");
-	  return;
-	}
-
-	new Notice("Generating...");
-
-	// @ts-expect-error
-	const canvas = this.app.workspace.getActiveViewOfType(ItemView).canvas;
-	
-    const onlySetMember = (set: Set<unknown>) => {
-      if (set.size !== 1) {
-		new Notice("Node has multiple parents");
-		throw new Error("Set has more than one member");
-	  }
-	  return set.values().next().value;
-	}
-
-	canvas.selection.forEach(async (node: any) => {
-	  let text
-	  let childNodes: any[] = [];
-
-	  if (node.isEditing) {
-        const editor = node.child.editor;
-	    const editorValue = editor.getValue();
-	    const lines = editorValue.split("\n");
-	    const cursor = editor.getCursor();
-
-        text = [...lines.slice(0, cursor.line), lines[cursor.line].slice(0, cursor.ch)].join("\n");
-		editor.setValue(text);
-        const after = editorValue.slice(text.length);
-		const childNode = await this.canvasCreateChildNode(canvas, node, after);
-		childNodes.push(childNode.id);
-	  } else text = node.text;
-	  let currentNode = canvas.edgeTo.data.get(node);
-	  if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
-	  while (currentNode) {
-		text = currentNode.text + text;
-		currentNode = canvas.edgeTo.data.get(currentNode);
-		if (currentNode !== undefined) currentNode = onlySetMember(currentNode).from.node;
-	  }
-
-	  const completions = await this.complete(text);
-	  if (!completions) return;
-
-	  for (let i = 0; i < completions.length; i++) {
-		const completion = completions[i];
-		const childNode = await this.canvasCreateChildNode(canvas, node, completion);
-		childNodes.push(childNode.id);
-	  }
-
-	  // adjust the y positions of the child nodes
-	  const data = canvas.getData();
-	  const reversedNodes = [...data.nodes].reverse();
-	  let y = node.y;
-	  canvas.importData({
-		edges: data.edges,
-		nodes: reversedNodes.map((node: any) => {
-		  if (childNodes.includes(node.id)) {
-			node.y = y;
-			y += node.height + 50;
-		  }
-		  return node;
-		}
-	  )});
-
-	  canvas.deselectAll();
-	  childNodes.forEach((id: string) => canvas.select(canvas.nodes.get(id)));
-	});
   }
 
   fullText(id: string | null, state: NoteState) {
@@ -1609,9 +1500,7 @@ export default class LoomPlugin extends Plugin {
 
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
-    this.setOpenAI();
-    this.setAzureOpenAI();
-    this.setCohere();
+    this.initializeProviders();
   }
 }
 
@@ -2422,7 +2311,7 @@ class LoomSettingTab extends PluginSettingTab {
       });
     });
 
-    const apiKeySetting = (name: string, setting: LSStringProperty) => {
+    const apiKeySetting = (name: string, setting: LoomSettingKey) => {
       new Setting(containerEl)
         .setName(`${name} API key`)
         .setDesc(`Required if using ${name}`)
