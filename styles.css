@@ -1,3 +1,47 @@
+/*
+@settings
+name: Loom
+id: loom
+settings:
+
+  -
+    id: theme-info
+    title: Loomfo
+    description: |
+      a socketteer/loom reimplementation in obsidian; [GitHub](https://github.com/7368697661/loom/tree/master)
+    markdown: true
+    type: info-text
+    level: 0
+
+  -
+        id: custom-text-color
+        title: Pregeneration text color
+        type: variable-themed-color
+        description: Styles the text prior to current generation's color
+        format: hex
+        opacity: false
+        allowEmpty: false
+        default-light: '#fff'
+        default-dark: '#000'
+
+  -
+        id: custom-text-background
+        title: Pregeneration text background
+        type: variable-themed-color
+        description: Styles the text prior to current generation's background on hover
+        format: hex
+        opacity: false
+        allowEmpty: false
+        default-light: '#fff'
+        default-dark: '#000'
+
+*/
+
+body {
+  --custom-text-color: var(--text-muted);
+  --custom-text-background: var(--background-secondary);
+}
+
 .loom {
   overflow-y: auto;
 }
@@ -250,20 +294,16 @@
   flex-grow: 1;
 }
 
-.theme-dark .loom-bct {
-  color: #808080;
+.loom-bct {
+  color: var(--custom-text-color);
 }
 
 .theme-dark .loom-bct-border {
-  border-right: 2px dashed #808080;
+  border-right: 2px dashed #333;
 }
 
-.theme-light .loom-bct {
-  color: #999;
-}
-
-.theme-dark .loom-bct-hover {
-  background-color: #111;
+.loom-bct-hover {
+  background-color: var(--custom-text-background);
 }
 
 .loom-sibling {

@@ -186,6 +186,7 @@ export default class LoomPlugin extends Plugin {
     await this.loadSettings();
     await this.loadState();
 
+    this.app.workspace.trigger("parse-style-settings")
     this.addSettingTab(new LoomSettingTab(this.app, this));
 
 	this.initializeProviders();
