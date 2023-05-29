@@ -56,6 +56,8 @@ interface LoomSettings {
   maxTokens: number;
   temperature: number;
   topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
   n: number;
 
   showSettings: boolean;
@@ -85,6 +87,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
   maxTokens: 60,
   temperature: 1,
   topP: 1,
+  frequencyPenalty: 0,
+  presencePenalty: 0,
   n: 5,
 
   showSettings: false,
@@ -1083,6 +1087,8 @@ export default class LoomPlugin extends Plugin {
             n: this.settings.n,
             temperature: this.settings.temperature,
             top_p: this.settings.topP,
+			presence_penalty: this.settings.presencePenalty,
+			frequency_penalty: this.settings.frequencyPenalty,
           })
         ).data.choices.map((choice) => choice.message?.content);
       } else if (this.settings.provider === "openai") {
@@ -1094,6 +1100,8 @@ export default class LoomPlugin extends Plugin {
             n: this.settings.n,
             temperature: this.settings.temperature,
             top_p: this.settings.topP,
+			presence_penalty: this.settings.presencePenalty,
+			frequency_penalty: this.settings.frequencyPenalty,
           })
         ).data.choices.map((choice) => choice.text);
       } else if (this.settings.provider === "azure-chat") {
@@ -1105,6 +1113,8 @@ export default class LoomPlugin extends Plugin {
             n: this.settings.n,
             temperature: this.settings.temperature,
             top_p: this.settings.topP,
+			presence_penalty: this.settings.presencePenalty,
+			frequency_penalty: this.settings.frequencyPenalty,
           })
         ).data.choices.map((choice) => choice.message?.content);
       } else if (this.settings.provider === "azure") {
@@ -1116,6 +1126,8 @@ export default class LoomPlugin extends Plugin {
             n: this.settings.n,
             temperature: this.settings.temperature,
             top_p: this.settings.topP,
+			presence_penalty: this.settings.presencePenalty,
+			frequency_penalty: this.settings.frequencyPenalty,
           })
         ).data.choices.map((choice) => choice.text);
       }
@@ -1140,6 +1152,8 @@ export default class LoomPlugin extends Plugin {
         num_generations: this.settings.n,
         temperature: this.settings.temperature,
         p: this.settings.topP,
+		frequency_penalty: this.settings.frequencyPenalty,
+		presence_penalty: this.settings.presencePenalty,
       });
       if (response.statusCode !== 200) {
         new Notice(
@@ -1166,6 +1180,8 @@ export default class LoomPlugin extends Plugin {
           n: this.settings.n,
           temperature: this.settings.temperature,
           top_p: this.settings.topP,
+		  presence_penalty: this.settings.presencePenalty,
+		  frequency_penalty: this.settings.frequencyPenalty,
         }),
       });
       if (response.status !== 200) {
@@ -1200,6 +1216,8 @@ export default class LoomPlugin extends Plugin {
           n: this.settings.n,
           temperature: this.settings.temperature,
           top_p: this.settings.topP,
+		  presence_penalty: this.settings.presencePenalty,
+		  frequency_penalty: this.settings.frequencyPenalty,
         }),
       });
       if (response.status !== 200) {
@@ -1717,6 +1735,22 @@ class LoomView extends ItemView {
       "number",
       (value) => parseFloat(value)
     );
+	setting(
+	  "Frequency penalty",
+	  "loom-frequency-penalty",
+	  "frequencyPenalty",
+	  String(settings.frequencyPenalty),
+	  "number",
+	  (value) => parseFloat(value)
+	);
+	setting(
+	  "Presence penalty",
+	  "loom-presence-penalty",
+	  "presencePenalty",
+	  String(settings.presencePenalty),
+	  "number",
+	  (value) => parseFloat(value)
+	);
     setting(
       "Number of completions",
       "loom-n",
@@ -2386,6 +2420,24 @@ class LoomSettingTab extends PluginSettingTab {
           await this.plugin.save();
         })
     );
+
+	new Setting(containerEl).setName("Frequency penalty").addText((text) =>
+	  text
+		.setValue(this.plugin.settings.frequencyPenalty.toString())
+		.onChange(async (value) => {
+		  this.plugin.settings.frequencyPenalty = parseFloat(value);
+		  await this.plugin.save();
+		})
+	);
+
+	new Setting(containerEl).setName("Presence penalty").addText((text) =>
+	  text
+		.setValue(this.plugin.settings.presencePenalty.toString())
+		.onChange(async (value) => {
+		  this.plugin.settings.presencePenalty = parseFloat(value);
+		  await this.plugin.save();
+		})
+	);
 
     new Setting(containerEl).setName("Number of completions").addText((text) =>
       text
