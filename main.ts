@@ -173,6 +173,19 @@ export default class LoomPlugin extends Plugin {
 	}));
   }
 
+  newNode(text: string, parentId: string | null, unread: boolean = false): [string, Node] {
+    const id = uuidv4();
+	const node: Node = {
+	  text,
+	  parentId,
+	  collapsed: false,
+	  unread,
+	  bookmarked: false,
+	  color: null,
+	};
+	return [id, node];
+  }
+
   apiKeySet() {
     if (["openai", "openai-chat"].includes(this.settings.provider)) return !!this.settings.openaiApiKey;
 	if (["azure", "azure-chat"].includes(this.settings.provider)) return !!this.settings.azureApiKey;
@@ -246,36 +259,20 @@ export default class LoomPlugin extends Plugin {
       return true;
     };
 
-    const openLoomPane = (focus: boolean) => {
-      const loomPanes = this.app.workspace.getLeavesOfType("loom");
-      try {
-        if (loomPanes.length === 0)
-          this.app.workspace
-          .getRightLeaf(false)
-          .setViewState({ type: "loom" });
-        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    const openLoomSiblingsPane = (focus: boolean) => {
-      const loomPanes = this.app.workspace.getLeavesOfType("loom-siblings");
-      try {
-        if (loomPanes.length === 0)
-          this.app.workspace
-            .getRightLeaf(false)
-            .setViewState({ type: "loom-siblings" });
-        else if (focus) this.app.workspace.revealLeaf(loomPanes[0]);
-      } catch (e) {
-        console.error(e);
-      }
-    };
+    const openPane = (type: string, focus: boolean) => {
+	  const panes = this.app.workspace.getLeavesOfType(type);
+	  try {
+		if (panes.length === 0)
+		  this.app.workspace.getRightLeaf(false).setViewState({ type });
+	    else if (focus) this.app.workspace.revealLeaf(panes[0]);
+	  } catch (e) {} // expect "TypeError: Cannot read properties of null (reading 'children')"
+	};
+    const openLoomPane = (focus: boolean) => openPane("loom", focus);
+	const openLoomSiblingsPane = (focus: boolean) => openPane("loom-siblings", focus);
 
     this.addCommand({
       id: "create-child",
       name: "Create child of current node",
-      icon: "plus",
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:create-child", state.current);
@@ -285,7 +282,6 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "create-sibling",
       name: "Create sibling of current node",
-      icon: "list-plus",
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:create-sibling", state.current);
@@ -295,12 +291,10 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "clone-current-node",
       name: "Clone current node",
-      icon: "copy",
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:clone", state.current);
         }),
-      hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "c" }],
     });
 
     this.addCommand({
@@ -313,124 +307,115 @@ export default class LoomPlugin extends Plugin {
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
 
+    const canMerge = (state: NoteState, id: string, checking: boolean) => {
+	  const parentId = state.nodes[id].parentId;
+	  if (!parentId) {
+        if (!checking) new Notice("Can't merge a root node with its parent");
+		return false;
+	  }
+	  const nSiblings = Object.values(state.nodes).filter((n) => n.parentId === parentId).length;
+	  if (nSiblings > 1) {
+		if (!checking) new Notice("Can't merge this node with its parent; it has siblings");
+		return false;
+	  }
+	  return true;
+	}
+
     this.addCommand({
       id: "merge-with-parent",
       name: "Merge current node with parent",
       checkCallback: (checking: boolean) =>
         withStateChecked(
           checking,
-          (state) => {
-            const parentId = state.nodes[state.current].parentId;
-
-            if (parentId === null) {
-              if (!checking)
-                new Notice("Can't merge a root node with its parent");
-              return false;
-            }
-            if (
-              Object.values(state.nodes).filter((n) => n.parentId === parentId)
-                .length > 1
-            ) {
-              if (!checking)
-                new Notice(
-                  "Can't merge this node with its parent; it has siblings"
-                );
-              return false;
-            }
-
-            return true;
-          },
+          (state) => canMerge(state, state.current, checking),
           (state) => {
             this.app.workspace.trigger("loom:merge-with-parent", state.current);
           }
         ),
       hotkeys: [{ modifiers: ["Alt"], key: "m" }],
     });
+	
+	const switchToSibling = (state: NoteState, delta: number) => {
+	  const parentId = state.nodes[state.current].parentId;
+	  const siblings = Object.entries(state.nodes)
+	    .filter(([, node]) => node.parentId === parentId)
+		.map(([id]) => id);
+	  
+	  if (siblings.length === 1) return;
+
+	  const index = (siblings.indexOf(state.current) + delta + siblings.length) % siblings.length;
+      this.app.workspace.trigger("loom:switch-to", siblings[index]);
+	}
 
     this.addCommand({
       id: "switch-to-next-sibling",
       name: "Switch to next sibling",
-      icon: "arrow-down",
       checkCallback: (checking: boolean) =>
-        withState(checking, (state) => {
-          const nextSibling = this.nextSibling(state.current, state);
-          if (nextSibling)
-            this.app.workspace.trigger("loom:switch-to", nextSibling);
-        }),
+        withState(checking, (state) => switchToSibling(state, 1)),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowDown" }],
     });
 
     this.addCommand({
       id: "switch-to-previous-sibling",
       name: "Switch to previous sibling",
-      icon: "arrow-up",
-      checkCallback: (checking: boolean) =>
-        withState(checking, (state) => {
-          const prevSibling = this.prevSibling(state.current, state);
-          if (prevSibling)
-            this.app.workspace.trigger("loom:switch-to", prevSibling);
-        }),
+	  checkCallback: (checking: boolean) =>
+	    withState(checking, (state) => switchToSibling(state, -1)),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowUp" }],
     });
+
+	const switchToParent = (state: NoteState) =>
+	  this.app.workspace.trigger("loom:switch-to", state.nodes[state.current].parentId);
 
     this.addCommand({
       id: "switch-to-parent",
       name: "Switch to parent",
-      icon: "arrow-left",
       checkCallback: (checking: boolean) =>
         withStateChecked(
           checking,
-          (state) => {
-            return state.nodes[state.current].parentId !== null;
-          },
-          (state) => {
-            const parentId = state.nodes[state.current].parentId;
-            if (parentId)
-              this.app.workspace.trigger("loom:switch-to", parentId);
-          }
+          (state) => state.nodes[state.current].parentId !== null,
+          switchToParent,
         ),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowLeft" }],
     });
 
+	const switchToChild = (state: NoteState) => {
+      const children = Object.entries(state.nodes)
+        .filter(([, node]) => node.parentId === state.current)
+        .sort(
+          ([, node1], [, node2]) =>
+            (node2.lastVisited || 0) - (node1.lastVisited || 0)
+        );
+
+      if (children.length > 0)
+        this.app.workspace.trigger("loom:switch-to", children[0][0]);
+	}
+
     this.addCommand({
       id: "switch-to-child",
       name: "Switch to child",
-      icon: "arrow-right",
       checkCallback: (checking: boolean) =>
-        withStateChecked(
-          checking,
-          (state) => {
-            const children = Object.values(state.nodes).filter(
-              (node: Node) => node.parentId === state.current
-            );
-            return children.length > 0;
-          },
-          (state) => {
-            const lastVisitedChild = this.lastVisitedChild(state);
-            if (lastVisitedChild)
-              this.app.workspace.trigger("loom:switch-to", lastVisitedChild);
-          }
-        ),
+        withState(checking, switchToChild),
       hotkeys: [{ modifiers: ["Alt"], key: "ArrowRight" }],
     });
+
+	const canDelete = (state: NoteState, id: string, checking: boolean) => {
+	  const rootNodes = Object.entries(state.nodes)
+	    .filter(([, node]) => node.parentId === null)
+		.map(([id]) => id);
+	  if (rootNodes.length === 1 && rootNodes[0] === id) {
+		if (!checking) new Notice("Can't delete the last root node");
+		return false;
+	  }
+	  return true;
+	}
 
     this.addCommand({
       id: "delete-current-node",
       name: "Delete current node",
-      icon: "trash",
       checkCallback: (checking: boolean) =>
         withStateChecked(
           checking,
-          (state) => {
-            const rootNodes = Object.entries(state.nodes).filter(
-              ([, node]) => node.parentId === null
-            );
-            if (rootNodes.length === 1 && rootNodes[0][0] === state.current) {
-              if (!checking) new Notice("The last root node can't be deleted");
-              return false;
-            }
-            return true;
-          },
+          (state) => canDelete(state, state.current, checking),
           (state) => {
             this.app.workspace.trigger("loom:delete", state.current);
           }
@@ -459,7 +444,6 @@ export default class LoomPlugin extends Plugin {
     this.addCommand({
       id: "toggle-collapse-current-node",
       name: "Toggle whether current node is collapsed",
-      icon: "folder-up",
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:toggle-collapse", state.current);
@@ -472,27 +456,32 @@ export default class LoomPlugin extends Plugin {
       callback: () => openLoomPane(true),
     });
 
+	this.addCommand({
+	  id: "open-siblings-pane",
+	  name: "Open Loom siblings pane",
+	  callback: () => openLoomSiblingsPane(true),
+	});
+
     this.addCommand({
       id: "debug-reset-state",
       name: "Debug: Reset state",
       callback: () => this.thenSaveAndRender(() => (this.state = {})),
     });
 
-    const getState = () => this.withFile((file) => {
-	  if (file.extension === "canvas") return "canvas";
-	  return this.state[file.path];
-	});
+    const getState = () => this.withFile((file) => this.state[file.path]);
     const getSettings = () => this.settings;
 
     this.registerView(
       "loom",
       (leaf) => new LoomView(leaf, getState, getSettings)
     );
-
     this.registerView(
       "loom-siblings",
       (leaf) => new LoomSiblingsView(leaf, getState)
     );
+
+    openLoomPane(true);
+    openLoomSiblingsPane(false);
 
     const loomEditorPlugin = ViewPlugin.fromClass(
       LoomEditorPlugin,
@@ -500,115 +489,89 @@ export default class LoomPlugin extends Plugin {
     );
     this.registerEditorExtension([loomEditorPlugin]);
 
-    openLoomPane(true);
-    openLoomSiblingsPane(false);
-
     this.registerEvent(
       this.app.workspace.on(
         "editor-change",
         (editor: Editor, view: MarkdownView) => {
-          // get cursor position, so it can be restored later
-          const cursor = editor.getCursor();
-
           // @ts-expect-error
           const editorView = editor.cm;
           const plugin = editorView.plugin(loomEditorPlugin);
+		  
+          // get cursor position, so it can be restored later
+          const cursor = editor.getCursor();
 
-          this.thenSaveAndRender(() => {
-            // if this note has no state, initialize it
-            if (!this.state[view.file.path])
-              this.state[view.file.path] = {
-                current: null as any, // `current` will be defined later
-                hoisted: [] as string[],
-                nodes: {},
-                generating: null,
-              };
+          // if this note has no state, initialize it and return
+          if (!this.state[view.file.path]) {
+            const [current, node] = this.newNode(editor.getValue(), null);
+            this.state[view.file.path] = {
+              current,
+              hoisted: [] as string[],
+              nodes: { [current]: node },
+              generating: null,
+            };
+		    return;
+		  }
 
-            // if this note has no current node, set it to the editor's text and return
-            if (!this.state[view.file.path].current) {
-              const current = uuidv4();
-              this.state[view.file.path].current = current;
-              this.state[view.file.path].nodes[current] = {
-                text: editor.getValue(),
-                parentId: null,
-                unread: false,
-                collapsed: false,
-                bookmarked: false,
-                color: null,
-              };
+          const current = this.state[view.file.path].current;
 
+          // `ancestors`: starts with the root node, ends with the parent of the current node
+          let ancestors: string[] = [];
+          let node: string | null = current;
+          while (node) {
+            node = this.state[view.file.path].nodes[node].parentId;
+            if (node) ancestors.push(node);
+          }
+          ancestors = ancestors.reverse();
+
+          // `ancestorTexts`: the text of each node in `ancestors`
+          const text = editor.getValue();
+          const ancestorTexts = ancestors.map(
+            (id) => this.state[view.file.path].nodes[id].text
+          );
+
+          // `familyTexts`: `ancestorTexts` + the current node's text
+          const familyTexts = ancestorTexts.concat(
+            this.state[view.file.path].nodes[current].text
+          );
+
+          // for each ancestor, check if the editor's text starts with the ancestor's full text
+          // if not, edit the ancestor's text to match the in-range section of the editor's text
+          const editNode = (i: number) => {
+            const prefix = familyTexts.slice(0, i).join("");
+            const suffix = familyTexts.slice(i + 1).join("");
+
+            let newText = text.substring(prefix.length);
+            newText = newText.substring(0, newText.length - suffix.length);
+
+            this.state[view.file.path].nodes[ancestors[i]].text = newText;
+          };
+
+          const updateDecorations = () => {
+            const nodeLengths = ancestors.map((id) => [
+              id,
+              this.state[view.file.path].nodes[id].text.length,
+            ]);
+            plugin.state = { ...plugin.state, nodeLengths };
+            plugin.update();
+          };
+
+          for (let i = 0; i < ancestors.length; i++) {
+            const textBefore = ancestorTexts.slice(0, i + 1).join("");
+            if (!text.startsWith(textBefore)) {
+              editNode(i);
+              updateDecorations();
               return;
             }
+          }
+          this.state[view.file.path].nodes[current].text = text.slice(
+            ancestorTexts.join("").length
+          );
 
-            const current = this.state[view.file.path].current;
-
-            // `ancestors`: starts with the root node, ends with the parent of the current node
-            let ancestors: string[] = [];
-            let node: string | null = current;
-            while (node) {
-              node = this.state[view.file.path].nodes[node].parentId;
-              if (node) ancestors.push(node);
-            }
-            ancestors = ancestors.reverse();
-
-            // `ancestorTexts`: the text of each node in `ancestors`
-            const text = editor.getValue();
-            const ancestorTexts = ancestors.map(
-              (id) => this.state[view.file.path].nodes[id].text
-            );
-
-            // `familyTexts`: `ancestorTexts` + the current node's text
-            const familyTexts = ancestorTexts.concat(
-              this.state[view.file.path].nodes[current].text
-            );
-
-            // for each ancestor, check if the editor's text starts with the ancestor's full text
-            // if not, edit the ancestor's text to match the in-range section of the editor's text
-            const editNode = (i: number) => {
-              const prefix = familyTexts.slice(0, i).join("");
-              const suffix = familyTexts.slice(i + 1).join("");
-
-              let newText = text.substring(prefix.length);
-              newText = newText.substring(0, newText.length - suffix.length);
-
-              this.state[view.file.path].nodes[ancestors[i]].text = newText;
-            };
-
-            const updateDecorations = () => {
-              const nodeLengths = ancestors.map((id) => [
-                id,
-                this.state[view.file.path].nodes[id].text.length,
-              ]);
-              plugin.state = {
-                nodeLengths,
-                showNodeBorders: this.settings.showNodeBorders,
-              };
-              plugin.update();
-            };
-
-            for (let i = 0; i < ancestors.length; i++) {
-              const textBefore = ancestorTexts.slice(0, i + 1).join("");
-
-              if (!text.startsWith(textBefore)) {
-                editNode(i);
-                updateDecorations();
-                return;
-              }
-            }
-
-            this.state[view.file.path].nodes[current].text = text.slice(
-              ancestorTexts.join("").length
-            );
-
-            updateDecorations();
-          });
-
+          updateDecorations();
+		  this.saveAndRender();
+		  
           // restore cursor position
           editor.setCursor(cursor);
-
-          // update `LoomEditorPlugin`'s state with:
-          //   - the text preceding the current node's text
-          //   - the current node's text
         }
       )
     );
@@ -619,38 +582,35 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("loom:switch-to", (id: string) =>
         this.wftsar((file) => {
           this.state[file.path].current = id;
+
           this.state[file.path].nodes[id].unread = false;
           this.state[file.path].nodes[id].lastVisited = Date.now();
 
+		  // uncollapse the node's ancestors
           const ancestors = this.family(id, this.state[file.path]).slice(0, -1);
           ancestors.forEach(
             (id) => (this.state[file.path].nodes[id].collapsed = false)
           );
 
+		  // update the editor's text
           const cursor = this.editor.getCursor();
           const linesBefore = this.editor.getValue().split("\n");
-
           this.editor.setValue(this.fullText(id, this.state[file.path]));
 
+		  // if the text preceding the cursor has changed, move the cursor to the end of the text
+		  // otherwise, restore the cursor position
           const linesAfter = this.editor
             .getValue()
             .split("\n")
-            .slice(0, cursor.line);
-          let different = false;
-          for (let i = 0; i < cursor.line; i++) {
+            .slice(0, cursor.line + 1);
+          for (let i = 0; i < cursor.line; i++)
             if (linesBefore[i] !== linesAfter[i]) {
-              different = true;
-              break;
+			  const line = this.editor.lineCount() - 1;
+			  const ch = this.editor.getLine(line).length;
+			  this.editor.setCursor({ line, ch });
+              return;
             }
-          }
-          if (linesBefore[cursor.line] !== this.editor.getLine(cursor.line))
-            different = true;
-
-          if (different) {
-            const line = this.editor.lineCount() - 1;
-            const ch = this.editor.getLine(line).length;
-            this.editor.setCursor({ line, ch });
-          } else this.editor.setCursor(cursor);
+		  this.editor.setCursor(cursor);
         })
       )
     );
@@ -702,16 +662,8 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:create-child", (id: string) =>
         this.withFile((file) => {
-          const newId = uuidv4();
-          this.state[file.path].nodes[newId] = {
-            text: "",
-            parentId: id,
-            unread: false,
-            collapsed: false,
-            bookmarked: false,
-            color: null,
-          };
-
+		  const [newId, newNode] = this.newNode("", id);
+		  this.state[file.path].nodes[newId] = newNode;
           this.app.workspace.trigger("loom:switch-to", newId);
         })
       )
@@ -721,16 +673,8 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:create-sibling", (id: string) =>
         this.withFile((file) => {
-          const newId = uuidv4();
-          this.state[file.path].nodes[newId] = {
-            text: "",
-            parentId: this.state[file.path].nodes[id].parentId,
-            unread: false,
-            collapsed: false,
-            bookmarked: false,
-            color: null,
-          };
-
+		  const [newId, newNode] = this.newNode("", this.state[file.path].nodes[id].parentId);
+		  this.state[file.path].nodes[newId] = newNode;
           this.app.workspace.trigger("loom:switch-to", newId);
         })
       )
@@ -740,16 +684,9 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:clone", (id: string) =>
         this.withFile((file) => {
-          const newId = uuidv4();
-          this.state[file.path].nodes[newId] = {
-            text: this.state[file.path].nodes[id].text,
-            parentId: this.state[file.path].nodes[id].parentId,
-            unread: false,
-            collapsed: false,
-            bookmarked: false,
-            color: null,
-          };
-
+          const node = this.state[file.path].nodes[id];
+		  const [newId, newNode] = this.newNode(node.text, node.parentId);
+		  this.state[file.path].nodes[newId] = newNode;
           this.app.workspace.trigger("loom:switch-to", newId);
         })
       )
@@ -760,17 +697,9 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("loom:break-at-point", () =>
         this.withFile((file) => {
           const parentId = this.breakAtPoint();
-
           if (parentId !== undefined) {
-            const newId = uuidv4();
-            this.state[file.path].nodes[newId] = {
-              text: "",
-              parentId,
-              unread: false,
-              collapsed: false,
-              bookmarked: false,
-              color: null,
-            };
+			const [newId, newNode] = this.newNode("", parentId);
+			this.state[file.path].nodes[newId] = newNode;
             this.app.workspace.trigger("loom:switch-to", newId);
           }
         })
@@ -782,30 +711,22 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("loom:merge-with-parent", (id: string) =>
         this.wftsar((file) => {
           const state = this.state[file.path];
-          const parentId = state.nodes[id].parentId;
 
-          if (parentId === null) {
-            new Notice("Can't merge a root node with its parent");
-            return;
-          }
-          if (
-            Object.values(state.nodes).filter((n) => n.parentId === parentId)
-              .length > 1
-          ) {
-            new Notice(
-              "Can't merge this node with its parent; it has siblings"
-            );
-            return;
-          }
+		  if (!canMerge(state, id, false)) return;
 
+          const parentId = state.nodes[id].parentId!;
+
+		  // update the merged node's text
           state.nodes[parentId].text += state.nodes[id].text;
 
+		  // move the children to the merged node
           const children = Object.entries(state.nodes).filter(
-            ([_, node]) => node.parentId === id
+            ([, node]) => node.parentId === id
           );
           for (const [childId] of children)
             this.state[file.path].nodes[childId].parentId = parentId;
 
+		  // switch to the merged node and delete the child node
           this.app.workspace.trigger("loom:switch-to", parentId);
           this.app.workspace.trigger("loom:delete", id);
         })
@@ -816,46 +737,66 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:delete", (id: string) =>
         this.wftsar((file) => {
-          const rootNodes = Object.entries(this.state[file.path].nodes)
-            .filter(([, node]) => node.parentId === null)
-            .map(([id]) => id);
-          if (rootNodes.length === 1 && rootNodes[0] === id) {
-            new Notice("The last root node can't be deleted");
-            return;
-          }
+		  const state = this.state[file.path];
+		  if (!canDelete(state, id, false)) return;
+		  const parentId = state.nodes[id].parentId;
 
-          this.state[file.path].hoisted = this.state[file.path].hoisted.filter(
-            (id_) => id_ !== id
-          );
+		  // remove the node from the hoist stack
+          this.state[file.path].hoisted = state.hoisted.filter((id_) => id_ !== id);
 
-		  let fallback;
-		  const siblings = Object.entries(this.state[file.path].nodes).filter(
-			([, node]) => node.parentId === this.state[file.path].nodes[id].parentId
-		  );
-		  
-		  const index = siblings.findIndex(([id_]) => id_ === id);
-		  if (index < siblings.length - 1) fallback = siblings[index + 1][0];
-		  else if (siblings.length > 1) fallback = siblings[index - 1][0];
-		  else fallback = this.state[file.path].nodes[id].parentId;
+		  // add the node and its descendants to a list of nodes to delete
 
-          let deleted = [id];
+		  let deleted = [id];
 
-          const deleteChildren = (id: string) => {
-            for (const [id_, node] of Object.entries(
-              this.state[file.path].nodes
-            ))
-              if (node.parentId === id) {
-                deleteChildren(id_);
-                delete this.state[file.path].nodes[id_];
-                deleted.push(id_);
-              }
-          };
+		  const addChildren = (id: string) => {
+			const children = Object.entries(state.nodes)
+			  .filter(([, node]) => node.parentId === id)
+			  .map(([id]) => id);
+			deleted = deleted.concat(children);
+			children.forEach(addChildren);
+		  }
+		  addChildren(id);
 
-          delete this.state[file.path].nodes[id];
-          deleteChildren(id);
+		  // if the current node will be deleted, switch to its next sibling or its closest ancestor
+		  if (deleted.includes(state.current)) {
+	    	const siblings = Object.entries(state.nodes)
+	    	  .filter(([, node]) => node.parentId === parentId)
+	    	  .map(([id]) => id);
 
-          if (deleted.includes(this.state[file.path].current))
-            this.app.workspace.trigger("loom:switch-to", fallback);
+			(() => {
+			  // try to switch to the next sibling
+	          if (siblings.some((id) => !deleted.includes(id))) {
+	        	const index = siblings.indexOf(state.current);
+	        	const nextSibling = siblings[(index + 1) % siblings.length];
+	        	this.app.workspace.trigger("loom:switch-to", nextSibling);
+		    	return;
+	          }
+
+			  // try to switch to the closest ancestor
+			  let ancestorId = parentId;
+			  while (ancestorId !== null) {
+				if (!deleted.includes(ancestorId)) {
+				  this.app.workspace.trigger("loom:switch-to", ancestorId);
+				  return;
+				}
+				ancestorId = state.nodes[ancestorId].parentId;
+			  }
+
+			  // if all else fails, switch to a root node
+			  const rootNodes = Object.entries(state.nodes)
+			    .filter(([, node]) => node.parentId === null)
+				.map(([id]) => id);
+			  for (const id of rootNodes)
+				if (!deleted.includes(id)) {
+				  this.app.workspace.trigger("loom:switch-to", id);
+				  return;
+				}
+			})();
+		  }
+
+		  // delete the nodes in the list
+		  for (const id of deleted)
+			delete this.state[file.path].nodes[id];
         })
       )
     );
@@ -864,10 +805,10 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:clear-children", (id: string) =>
         this.wftsar((file) => {
-          const children = Object.entries(this.state[file.path].nodes).filter(
-            ([, node]) => node.parentId === id
-          );
-          for (const [id] of children)
+          const children = Object.entries(this.state[file.path].nodes)
+		    .filter(([, node]) => node.parentId === id)
+			.map(([id]) => id);
+          for (const id of children)
             this.app.workspace.trigger("loom:delete", id);
         })
       )
@@ -878,10 +819,10 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.on("loom:clear-siblings", (id: string) =>
         this.wftsar((file) => {
           const parentId = this.state[file.path].nodes[id].parentId;
-          const siblings = Object.entries(this.state[file.path].nodes).filter(
-            ([id_, node]) => node.parentId === parentId && id_ !== id
-          );
-          for (const [id] of siblings)
+          const siblings = Object.entries(this.state[file.path].nodes)
+		    .filter(([id_, node]) => node.parentId === parentId && id_ !== id)
+			.map(([id]) => id);
+          for (const id of siblings)
             this.app.workspace.trigger("loom:delete", id);
         })
       )
@@ -1330,43 +1271,6 @@ export default class LoomPlugin extends Plugin {
     ids = ids.reverse();
 
     return ids;
-  }
-
-  nextSibling(id: string, state: NoteState) {
-    const parentId = state.nodes[id].parentId;
-    const siblings = Object.entries(state.nodes)
-      .filter(([, node]) => node.parentId === parentId)
-      .map(([id]) => id);
-
-    if (siblings.length === 1) return null;
-
-    const nextIndex = (siblings.indexOf(id) + 1) % siblings.length;
-    return siblings[nextIndex];
-  }
-
-  prevSibling(id: string, state: NoteState) {
-    const parentId = state.nodes[id].parentId;
-    const siblings = Object.entries(state.nodes)
-      .filter(([, node]) => node.parentId === parentId)
-      .map(([id]) => id);
-
-    if (siblings.length === 1) return null;
-
-    const prevIndex =
-      (siblings.indexOf(id) + siblings.length - 1) % siblings.length;
-    return siblings[prevIndex];
-  }
-
-  lastVisitedChild(state: NoteState) {
-    const children = Object.entries(state.nodes)
-      .filter(([, node]) => node.parentId === state.current)
-      .sort(
-        ([, node1], [, node2]) =>
-          (node2.lastVisited || 0) - (node1.lastVisited || 0)
-      );
-
-    if (children.length === 0) return null;
-    return children[0][0];
   }
 
   breakAtPoint(): string | null | undefined {

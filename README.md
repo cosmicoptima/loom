@@ -18,7 +18,6 @@ If you are interested in funding development of Loom(sidian), you can **[support
 
 - generate - `Ctrl+Space`
 - generate siblings - `Ctrl+Shift+Space`
-- clone (current node) - `Ctrl+Alt+c`
 - split at point - `Alt+c`
 - delete (current node) - `Alt+Backspace`
 

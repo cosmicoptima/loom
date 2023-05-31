@@ -3,43 +3,37 @@
 name: Loom
 id: loom
 settings:
-
   -
-    id: theme-info
-    title: Loomfo
-    description: |
-      a socketteer/loom reimplementation in obsidian; [GitHub](https://github.com/7368697661/loom/tree/master)
-    markdown: true
-    type: info-text
-    level: 0
-
-  -
-        id: custom-text-color
-        title: Pregeneration text color
+        id: ancestor-editor-color
         type: variable-themed-color
-        description: Styles the text prior to current generation's color
+        title: Ancestor node text color
+        description: Color of ancestor nodes' text in the editor
         format: hex
         opacity: false
         allowEmpty: false
-        default-light: '#fff'
-        default-dark: '#000'
+        default-light: "#808080"
+        default-dark: "#808080"
 
   -
-        id: custom-text-background
-        title: Pregeneration text background
+        id: ancestor-editor-background
         type: variable-themed-color
-        description: Styles the text prior to current generation's background on hover
+        title: Ancestor node background color
+        description: Background color of ancestor nodes in the editor upon hover
         format: hex
         opacity: false
         allowEmpty: false
-        default-light: '#fff'
-        default-dark: '#000'
-
+        default-light: "#eee"
+        default-dark: "#111"
 */
 
 body {
-  --custom-text-color: var(--text-muted);
-  --custom-text-background: var(--background-secondary);
+  --ancestor-editor-color: #808080;
+}
+.theme-light {
+  --ancestor-editor-background: #eee;
+}
+.theme-dark {
+  --ancestor-editor-background: #111;
 }
 
 .loom {
@@ -295,7 +289,7 @@ body {
 }
 
 .loom-bct {
-  color: var(--custom-text-color);
+  color: var(--ancestor-editor-color);
 }
 
 .theme-dark .loom-bct-border {
@@ -303,7 +297,7 @@ body {
 }
 
 .loom-bct-hover {
-  background-color: var(--custom-text-background);
+  background-color: var(--ancestor-editor-background);
 }
 
 .loom-sibling {
