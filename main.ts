@@ -131,20 +131,20 @@ export default class LoomPlugin extends Plugin {
     return callback(file);
   }
 
-  renderViews() {
+  renderLoomViews() {
 	const views = this.app.workspace.getLeavesOfType("loom").map((leaf) => leaf.view) as LoomView[];
 	views.forEach((view) => view.render());
   }
 
-  renderSiblingsViews() {
+  renderLoomSiblingsViews() {
 	const views = this.app.workspace.getLeavesOfType("loom-siblings").map((leaf) => leaf.view) as LoomSiblingsView[];
 	views.forEach((view) => view.render());
   }
 
   saveAndRender() {
 	this.save();
-	this.renderViews();
-	this.renderSiblingsViews();
+	this.renderLoomViews();
+	this.renderLoomSiblingsViews();
   }
 
   thenSaveAndRender(callback: () => void) {
@@ -236,7 +236,7 @@ export default class LoomPlugin extends Plugin {
       if (!file || file.extension !== "md") return false;
 
       const state = this.state[file.path];
-      if (!state) this.initializeNote(file);
+      if (!state) this.initializeNoteState(file);
 
       if (!checking) callback(state);
       return true;
@@ -251,7 +251,7 @@ export default class LoomPlugin extends Plugin {
       if (!file || file.extension !== "md") return false;
 
       const state = this.state[file.path];
-      if (!state) this.initializeNote(file);
+      if (!state) this.initializeNoteState(file);
 
       if (!checkCallback(state)) return false;
 
@@ -833,15 +833,15 @@ export default class LoomPlugin extends Plugin {
         // @ts-expect-error
         "loom:set-setting",
         (setting: string, value: any) => {
-          this.thenSaveAndRender(
-            () => (this.settings = { ...this.settings, [setting]: value })
-          );
+		  this.settings = { ...this.settings, [setting]: value };
+		  this.saveAndRender();
 
+		  // if changing showNodeBorders, update the editor
           if (setting === "showNodeBorders") {
             // @ts-expect-error
             const editor = this.editor.cm;
-
             const plugin = editor.plugin(loomEditorPlugin);
+
             plugin.state.showNodeBorders = this.settings.showNodeBorders;
             plugin.update();
 
@@ -853,88 +853,75 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:import", (pathName: string) =>
+      this.app.workspace.on("loom:import", (path: string) =>
         this.wftsar((file) => {
-          if (!pathName) return;
-
-          const rawPathName = untildify(pathName);
-          const json = fs.readFileSync(rawPathName, "utf8");
-          const data = JSON.parse(json);
+          const fullPath = untildify(path);
+          const data = JSON.parse(fs.readFileSync(fullPath, "utf8"));
           this.state[file.path] = data;
-          new Notice("Imported from " + rawPathName);
-
           this.app.workspace.trigger("loom:switch-to", data.current);
+
+          new Notice("Imported from " + fullPath);
         })
       )
     );
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:export", (pathName: string) =>
+      this.app.workspace.on("loom:export", (path: string) =>
         this.wftsar((file) => {
-          if (!pathName) return;
+          const fullPath = untildify(path);
+          const json = JSON.stringify(this.state[file.path], null, 2);
+          fs.writeFileSync(fullPath, json);
 
-          const data = this.state[file.path];
-          const json = JSON.stringify(data, null, 2);
-          const rawPathName = untildify(pathName);
-          fs.writeFileSync(rawPathName, json);
-          new Notice("Exported to " + rawPathName);
+          new Notice("Exported to " + fullPath);
         })
       )
     );
 
+    const onFileOpen = (file: TFile) => {
+      if (file.extension !== "md") return;
+
+	  // if this file is new, initialize its state
+      if (!this.state[file.path])
+        this.initializeNoteState(file);
+
+      const state = this.state[file.path];
+
+	  // find this file's `MarkdownView`, then set `this.editor` to its editor
+      this.app.workspace.iterateRootLeaves((leaf) => {
+        if (
+          leaf.view instanceof MarkdownView &&
+          leaf.view.file.path === file.path
+        )
+          this.editor = leaf.view.editor;
+      });
+
+	  // get the length of each ancestor's text,
+	  // which will be passed to `LoomEditorPlugin` to mark ancestor nodes in the editor
+      const ancestors = this.ancestors(file, state.current);
+      const ancestorLengths = ancestors.map((id) =>
+	    [id, state.nodes[id].text.length]);
+
+	  // set `LoomEditorPlugin`'s state, then refresh it
+      // @ts-expect-error
+      const plugin = this.editor.cm.plugin(loomEditorPlugin);
+      plugin.state = {
+        ancestorLengths,
+        showNodeBorders: this.settings.showNodeBorders,
+      };
+      plugin.update();
+
+      this.renderLoomViews();
+      this.renderLoomSiblingsViews();
+	}
+
     this.registerEvent(
-      this.app.workspace.on("file-open", (file) => {
-        if (!file) return;
-		if (file.extension !== "md") return;
-
-        this.renderViews();
-        this.renderSiblingsViews();
-
-        this.app.workspace.iterateRootLeaves((leaf) => {
-          if (
-            leaf.view instanceof MarkdownView &&
-            leaf.view.file.path === file.path
-          )
-            this.editor = leaf.view.editor;
-        });
-
-        if (!this.state[file.path]) {
-          this.initializeNote(file);
-        }
-
-        // @ts-expect-error
-        const editorView = this.editor.cm;
-        const plugin = editorView.plugin(loomEditorPlugin);
-
-        const state = this.state[file.path];
-
-        let ancestors: string[] = [];
-        let node: string | null = state.current;
-        while (node) {
-          node = this.state[file.path].nodes[node].parentId;
-          if (node) ancestors.push(node);
-        }
-        ancestors = ancestors.reverse();
-        const ancestorTexts = ancestors.map((id) => state.nodes[id].text);
-
-        const nodeLengths = ancestors.map((id, i) => [
-          id,
-          ancestorTexts[i].length,
-        ]);
-
-        plugin.state = {
-          nodeLengths,
-          showNodeBorders: this.settings.showNodeBorders,
-        };
-        plugin.update();
-      })
+      this.app.workspace.on("file-open", (file) => file && onFileOpen(file))
     );
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
         if (!leaf) return;
-
         const view = leaf.view;
         if (view instanceof MarkdownView) this.editor = view.editor;
       })
@@ -942,8 +929,8 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("resize", () => {
-        this.renderViews();
-        this.renderSiblingsViews();
+        this.renderLoomViews();
+        this.renderLoomSiblingsViews();
       })
     );
 
@@ -969,11 +956,12 @@ export default class LoomPlugin extends Plugin {
           leaf.view.file.path === file.path
         )
           this.editor = leaf.view.editor;
+		onFileOpen(file);
       })
     );
   }
 
-  initializeNote(file: TFile) {
+  initializeNoteState(file: TFile) {
     // coerce to NoteState because `current` will be defined
     this.state[file.path] = {
       hoisted: [] as string[],
@@ -994,6 +982,17 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].current = id;
 
     this.thenSaveAndRender(() => {});
+  }
+
+  ancestors(file: TFile, id: string): string[] {
+    const state = this.state[file.path];
+	let ancestors = [];
+	let node: string | null = id;
+	while (node) {
+	  node = state.nodes[node].parentId;
+	  if (node) ancestors.push(node);
+	}
+	return ancestors.reverse();
   }
 
   async completeInner(prompt: string) {
@@ -1496,10 +1495,11 @@ class LoomView extends ItemView {
         attr: { "aria-label": "Import JSON", for: "loom-import" },
       });
       setIcon(importNavButton, "import");
-      importFileInput.addEventListener("change", () =>
+      importFileInput.addEventListener("change", () => {
         // @ts-expect-error
-        this.app.workspace.trigger("loom:import", importFileInput.files[0].path)
-      );
+	    const pathName = importFileInput.files[0].path;
+        if (pathName) this.app.workspace.trigger("loom:import", pathName);
+	  });
 
       const exportNavButton = navButtonsContainer.createDiv({
         cls: `clickable-icon nav-action-button${
@@ -1522,7 +1522,7 @@ class LoomView extends ItemView {
               filters: [{ extensions: ["json"] }],
             })
             .then((result: any) => {
-              if (result)
+              if (result && result.filePath)
                 this.app.workspace.trigger("loom:export", result.filePath);
             });
       });
@@ -1544,9 +1544,9 @@ class LoomView extends ItemView {
     });
     const exportButton = exportDiv.createEl("button", {});
     setIcon(exportButton, "download");
-    exportButton.addEventListener("click", () =>
-      this.app.workspace.trigger("loom:export", exportInput.value)
-    );
+    exportButton.addEventListener("click", () => {
+      if (exportInput.value) this.app.workspace.trigger("loom:export", exportInput.value)
+	});
 
     container.createDiv({
       cls: `loom-vspacer${settings.showExport ? "" : " hidden"}`,
@@ -2095,7 +2095,7 @@ class LoomSiblingsView extends ItemView {
 }
 
 interface LoomEditorPluginState {
-  nodeLengths: [string, number][];
+  ancestorLengths: [string, number][];
   showNodeBorders: boolean;
 }
 
@@ -2106,7 +2106,7 @@ class LoomEditorPlugin implements PluginValue {
 
   constructor(view: EditorView) {
     this.decorations = Decoration.none;
-    this.state = { nodeLengths: [], showNodeBorders: false };
+    this.state = { ancestorLengths: [], showNodeBorders: false };
     this.view = view;
   }
 
@@ -2125,7 +2125,7 @@ class LoomEditorPlugin implements PluginValue {
     };
 
     let i = 0;
-    for (const [id, length] of this.state.nodeLengths) {
+    for (const [id, length] of this.state.ancestorLengths) {
       pushNewRange(i, i + length, id);
       i += length;
 
