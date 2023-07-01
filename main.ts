@@ -142,7 +142,6 @@ export default class LoomPlugin extends Plugin {
 	  collapsed: false,
 	  unread,
 	  bookmarked: false,
-	  color: null,
 	};
 	return [id, node];
   }
@@ -699,13 +698,6 @@ export default class LoomPlugin extends Plugin {
             (this.state[file.path].nodes[id].bookmarked =
               !this.state[file.path].nodes[id].bookmarked)
         )
-      )
-    );
-
-    this.registerEvent(
-      // @ts-expect-error
-      this.app.workspace.on("loom:set-color", (id: string, color: Color) =>
-        this.wftsar((file) => (this.state[file.path].nodes[id].color = color))
       )
     );
 

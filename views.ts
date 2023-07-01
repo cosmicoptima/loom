@@ -265,7 +265,6 @@ export class LoomView extends ItemView {
 	});
 	if (id === state.current) nodeContainer.addClass("is-active");
 	if (node.unread) nodeContainer.addClass("loom__node-unread");
-	if (node.color) nodeContainer.addClass(`loom__node-${node.color}`);
 
 	const children = Object.entries(state.nodes)
 	  .filter(([, node]) => node.parentId === id)
