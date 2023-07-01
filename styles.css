@@ -36,69 +36,137 @@ body {
   --ancestor-editor-background: #111;
 }
 
-.loom {
+/* all views */
+
+.loom__view {
   overflow-y: auto;
 }
 
-.loom-buttons {
+/* nav buttons */
+
+.loom__nav-buttons {
   margin-top: 0.5em;
 }
 
-.loom-zport {
+/* alt export field */
+
+.loom__alt-export-field {
   display: flex;
   flex-direction: row;
   align-items: center;
   width: 100%;
-  margin-bottom: 0.5em;
+  margin-bottom: 0.8em;
 }
-
-.loom-zport input {
+.loom__alt-export-field input {
   flex-grow: 1;
 }
-
-.loom-zport button {
+.loom__alt-export-field button {
   margin-left: 0.5em;
 }
 
-.loom-vspacer {
-  padding-top: 0.5em;
-}
+/* settings */
 
-.loom-settings {
+.loom__settings {
   margin-bottom: 0.3em;
 }
 
-.hidden {
-  display: none;
-}
-
-.loom-setting {
+.loom__setting {
   display: flex;
   flex-direction: column;
 }
-
-.loom-setting label {
+.loom__setting label {
   font-size: 0.9em;
   margin-bottom: 0.3em;
 }
-
-.loom-setting input {
+.loom__setting input {
+  margin-bottom: 0.6em;
+}
+.loom__setting select {
   margin-bottom: 0.6em;
 }
 
-.loom-setting select {
-  margin-bottom: 0.6em;
+/* all tree headers */
+
+.loom__tree-header {
+  padding: 0.35em;
 }
 
-.loom-collapse {
+.loom__tree-header-text {
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
+/* bookmarks header */
+
+.loom__bookmarks {
+  margin-bottom: 0.5em;
+}
+
+.loom__bookmarks-count {
+  color: var(--text-faint);
+}
+
+/* nodes */
+
+.loom__node {
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+.loom__node.is-active {
+  background-color: var(--nav-item-background-active);
+}
+
+.loom__collapse-button {
   margin-left: 0.6em;
 }
-
-.loom-collapse.is-collapsed {
+.loom__collapse-button.loom__is-collapsed {
   transform: rotate(-90deg);
 }
 
-.loom-node-footer {
+.loom__node-bookmark-icon {
+  display: flex;
+  align-items: center;
+  margin-left: 0.3em;
+  margin-right: -0.3em;
+}
+
+.loom__node-unread {
+  font-weight: bold !important;
+}
+
+.loom__node-unread-indicator {
+  width: 0.3em;
+  height: 0.3em;
+  border-radius: 50%;
+  background-color: var(--nav-item-color);
+  margin-left: 0.6em;
+  flex-shrink: 0;
+}
+
+.loom__node-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.35em 0 0.35em 0.6em;
+  flex-grow: 1;
+}
+
+.loom__node-buttons {
+  display: none;
+  padding-right: 0.5em;
+}
+.loom__node:hover .loom__node-buttons {
+  display: inline-flex !important;
+}
+
+.loom__node-button {
+  display: inline-flex !important;
+  margin-left: 0.1em;
+  --icon-size: 1.1rem;
+}
+
+.loom__node-footer {
   color: var(--text-faint);
   font-size: 0.9em;
   margin-left: calc(0.85em + 1px);
@@ -112,133 +180,8 @@ body {
   border-left: 1px solid var(--color-base-35);
 }
 
-.loom-hoist-button:hover {
-  color: var(--text-normal);
-}
-
-.loom-node-footer-text {
+.loom__node-footer-text {
   margin-left: 0.35em;
-}
-
-.loom-children {
-  margin-left: 0.85em;
-  padding-left: 0.6em;
-  border-left: 1px solid var(--color-base-35);
-}
-
-.loom-node {
-  display: flex;
-  align-items: center;
-  padding: 0;
-}
-
-.loom-node.is-active {
-  background-color: var(--nav-item-background-active);
-}
-
-.loom-node-red {
-  background-color: rgba(var(--color-red-rgb), 0.2) !important;
-}
-.loom-node-red.is-active {
-  background-color: rgba(var(--color-red-rgb), 0.3) !important;
-}
-
-.loom-node-orange {
-  background-color: rgba(var(--color-orange-rgb), 0.2) !important;
-}
-.loom-node-orange.is-active {
-  background-color: rgba(var(--color-orange-rgb), 0.3) !important;
-}
-
-.loom-node-yellow {
-  background-color: rgba(var(--color-yellow-rgb), 0.2) !important;
-}
-.loom-node-yellow.is-active {
-  background-color: rgba(var(--color-yellow-rgb), 0.3) !important;
-}
-
-.loom-node-green {
-  background-color: rgba(var(--color-green-rgb), 0.2) !important;
-}
-.loom-node-green.is-active {
-  background-color: rgba(var(--color-green-rgb), 0.3) !important;
-}
-
-.loom-node-blue {
-  background-color: rgba(var(--color-blue-rgb), 0.2) !important;
-}
-.loom-node-blue.is-active {
-  background-color: rgba(var(--color-blue-rgb), 0.3) !important;
-}
-
-.loom-node-purple {
-  background-color: rgba(var(--color-purple-rgb), 0.2) !important;
-}
-.loom-node-purple.is-active {
-  background-color: rgba(var(--color-purple-rgb), 0.3) !important;
-}
-
-.loom-node-inner {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0.35em 0 0.35em 0.6em;
-  flex-grow: 1;
-}
-
-.loom-node-bookmark {
-  display: flex;
-  align-items: center;
-  margin-left: 0.3em;
-  margin-right: -0.3em;
-}
-
-.loom-node-unread {
-  font-weight: bold !important;
-}
-
-.loom-node-unread-indicator {
-  width: 0.3em;
-  height: 0.3em;
-  border-radius: 50%;
-  background-color: var(--nav-item-color);
-  margin-left: 0.6em;
-  flex-shrink: 0;
-}
-
-.loom-icon {
-  display: inline-flex !important;
-  margin-left: 0.1em;
-  --icon-size: 1.1rem;
-}
-
-.loom-icons:not(.is-mobile) {
-  display: none;
-}
-
-.loom-node:hover .loom-icons {
-  display: inline-flex !important;
-}
-
-.loom-spacer {
-  padding-right: 0.6em;
-}
-
-.loom-section {
-  margin-bottom: 0.5em;
-}
-
-.loom-section-header {
-  padding: 0.35em;
-}
-
-.loom-section-header-inner {
-  color: var(--text-normal);
-  font-weight: var(--font-medium);
-}
-
-.loom-section-count {
-  color: var(--text-faint);
 }
 
 @keyframes rotating {
@@ -249,58 +192,27 @@ body {
     transform: rotate(360deg);
   }
 }
-
-.rotating svg {
+.loom__node-generating-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.loom__node-generating-icon svg {
   animation: rotating 2s linear infinite;
 }
 
-.rotating {
-  display: inline-flex;
-  align-items: center;
-}
-
-.obsidian-button {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.loom__node-show-more:hover {
   color: var(--text-normal);
-  font-size: var(--font-ui-small);
-  border-radius: var(--button-radius);
-  border: 0;
-  padding: var(--size-4-1) var(--size-4-3);
-  height: var(--input-height);
-  font-weight: var(--input-font-weight);
-  cursor: var(--cursor);
-  font-family: inherit;
-  outline: none;
-  user-select: none;
-  white-space: nowrap;
-  background-color: var(--interactive-normal);
-  box-shadow: var(--input-shadow);
 }
 
-.obsidian-button:hover {
-  background-color: var(--interactive-hover);
+.loom__node-children {
+  margin-left: 0.85em;
+  padding-left: 0.6em;
+  border-left: 1px solid var(--color-base-35);
 }
 
-.loom-import-button {
-  flex-grow: 1;
-}
+/* nodes -- siblings view */
 
-.loom-bct {
-  color: var(--ancestor-editor-color);
-}
-
-.theme-dark .loom-bct-border {
-  border-right: 2px dashed #333;
-}
-
-.loom-bct-hover {
-  background-color: var(--ancestor-editor-background);
-}
-
-.loom-sibling {
+.loom__sibling {
   color: var(--nav-item-color);
   font-size: 0.9em;
 
@@ -309,21 +221,39 @@ body {
   padding: 0.8em;
   white-space: pre-wrap;
 }
-
-.loom-sibling:hover {
+.loom__sibling:hover {
   color: var(--nav-item-color-active);
 }
-
-.loom-sibling.is-active {
+.loom__sibling.is-active {
   background-color: var(--nav-item-background-active);
   color: var(--nav-item-color-active);
 }
 
-.loom-sibling-divider {
+.loom__sibling-ellipsis {
+  color: var(--text-faint);
+  margin-right: 0.3em;
+}
+
+.loom__sibling-separator {
   margin: 0;
 }
 
-.loom-sibling-ellipsis {
-  color: var(--text-faint);
-  margin-right: 0.3em;
+/* nodes -- editor */
+
+.loom__editor-node {
+  color: var(--ancestor-editor-color);
+}
+
+.loom__editor-node-hover {
+  background-color: var(--ancestor-editor-background);
+}
+
+.theme-dark .loom__editor-node-border {
+  border-right: 2px dashed #333;
+}
+
+/* hidden -- must be at end */
+
+.hidden {
+  display: none;
 }
