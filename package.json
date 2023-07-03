@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-loom",
-	"version": "1.13.1",
+	"version": "1.14.0",
 	"description": "Loom in Obsidian",
 	"main": "main.js",
 	"scripts": {
@@ -27,10 +27,12 @@
 		"@codemirror/state": "^6.2.0",
 		"@codemirror/view": "^6.9.3",
 		"@types/lodash": "^4.14.191",
+		"@types/roman-numerals": "^0.3.0",
 		"azure-openai": "^0.9.4",
 		"cohere-ai": "^6.1.0",
 		"gpt-tokenizer": "^2.1.1",
 		"openai": "^3.2.0",
+		"roman-numerals": "^0.3.2",
 		"untildify": "^4.0.0",
 		"uuid": "^9.0.0"
 	}

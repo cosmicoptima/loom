@@ -1,4 +1,10 @@
-import { LoomView, LoomSiblingsView, LoomEditorPlugin, loomEditorPluginSpec } from './views';
+import {
+  LoomView,
+  LoomSiblingsView,
+  LoomEditorPlugin,
+  loomEditorPluginSpec,
+  MakePromptFromPassagesModal,
+} from './views';
 import { PROVIDERS, Provider, LoomSettings, Node, NoteState } from './common';
 
 import {
@@ -23,6 +29,7 @@ import p50k from "gpt-tokenizer/esm/model/text-davinci-003";
 import r50k from "gpt-tokenizer/esm/model/davinci";
 
 import * as fs from "fs";
+import { toRoman } from "roman-numerals";
 import { v4 as uuidv4 } from "uuid";
 const untildify = require("untildify") as any;
 
@@ -47,6 +54,10 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
   ocpApiKey: "",
   ocpUrl: "",
+
+  passageFolder: "",
+  defaultPassageSeparator: "\\n\\n---\\n\\n",
+  defaultPassageFrontmatter: "%r:\\n",
 
   provider: "ocp",
   model: "code-davinci-002",
@@ -494,6 +505,24 @@ export default class LoomPlugin extends Plugin {
         }),
     });
 
+    const getState = () => this.withFile((file) => this.state[file.path]);
+    const getSettings = () => this.settings;
+
+    this.addCommand({
+	  id: "make-prompt-from-passages",
+	  name: "Make prompt from passages",
+	  callback: () => {
+		if (this.settings.passageFolder.trim() === "") {
+		  new Notice("Please set the passage folder in settings");
+		  return;
+		}
+		new MakePromptFromPassagesModal(
+          this.app,
+	  	  getSettings,
+	    ).open();
+	  }
+	});
+
     this.addCommand({
       id: "open-pane",
       name: "Open Loom pane",
@@ -517,9 +546,6 @@ export default class LoomPlugin extends Plugin {
       name: "Debug: Reset hoist stack",
 	  callback: () => this.wftsar((file) => (this.state[file.path].hoisted = [])),
 	});
-
-    const getState = () => this.withFile((file) => this.state[file.path]);
-    const getSettings = () => this.settings;
 
     this.registerView(
       "loom",
@@ -920,6 +946,46 @@ export default class LoomPlugin extends Plugin {
         })
       )
     );
+
+	this.registerEvent(
+	  this.app.workspace.on(
+	    // @ts-expect-error
+		"loom:make-prompt-from-passages",
+		(
+		  passages: string[],
+		  rawSeparator: string,
+		  rawFrontmatter: string,
+		) => this.wftsar((file) => {
+          const separator = rawSeparator.replace(/\\n/g, "\n");
+		  const frontmatter = (index: number) => rawFrontmatter
+		    .replace(/%n/g, (index + 1).toString())
+			.replace(/%r/g, toRoman(index + 1))
+			.replace(/\\n/g, "\n");
+
+		  const passageTexts = passages.map((passage, index) => {
+			return Object.entries(this.state[passage].nodes)
+			  .filter(([, node]) => node.parentId === null)
+			  .map(([, node]) => frontmatter(index) + node.text);
+		  });
+		  const text = `${passageTexts.join(separator)}${separator}${frontmatter(passages.length)}`;
+
+		  const state = this.state[file.path];
+		  const currentNode = state.nodes[state.current];
+
+		  let id;
+		  if (currentNode.text === "" && currentNode.parentId === null) {
+			this.state[file.path].nodes[state.current].text = text;
+			id = state.current;
+		  } else {
+	        const [newId, newNode] = this.newNode(text, null);
+			this.state[file.path].nodes[newId] = newNode;
+			id = newId;
+		  }
+
+		  this.app.workspace.trigger("loom:switch-to", id);
+		})
+	  )
+	);
 
     const onFileOpen = (file: TFile) => {
       if (file.extension !== "md") return;
@@ -1396,6 +1462,19 @@ class LoomSettingTab extends PluginSettingTab {
 	idSetting("OpenAI organization ID", "openaiOrganization");
     apiKeySetting("Azure", "azureApiKey")
 	idSetting("Azure resource endpoint", "azureEndpoint");
+
+    new Setting(containerEl)
+      .setName("Passage folder location")
+      .setDesc("Passages can be quickly combined into a multipart prompt")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.passageFolder).onChange(async (value) => {
+          this.plugin.settings.passageFolder = value;
+          await this.plugin.save();
+        })
+      );
+	
+    idSetting("Default passage separator", "defaultPassageSeparator");
+    idSetting("Default passage frontmatter", "defaultPassageFrontmatter");
 	
 	idSetting("Model", "model");
 	intSetting("Length (in tokens)", "maxTokens");

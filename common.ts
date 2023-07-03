@@ -14,6 +14,10 @@ export interface LoomSettings {
   ocpApiKey: string;
   ocpUrl: string;
 
+  passageFolder: string;
+  defaultPassageSeparator: string;
+  defaultPassageFrontmatter: string;
+
   provider: Provider;
   model: string;
   maxTokens: number;

@@ -252,6 +252,37 @@ body {
   border-right: 2px dashed #333;
 }
 
+/* "make prompt from passages" modal */
+
+.loom__passage-list {
+  max-height: 10em;
+  overflow-y: auto;
+}
+
+.loom__passage {
+  display: flex;
+  align-items: center;
+  padding: 0.35em 0 0.35em 0.6em;
+}
+.loom__passage:hover {
+  background-color: var(--nav-item-background-active);
+}
+
+.loom__selected-passages-title {
+  font-weight: bold;
+  margin: 1em 0 0.5em;
+}
+
+.loom__selected-passage-list {
+  margin-bottom: 0.75em;
+}
+
+.loom__no-passages-selected {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+  padding: 0.35em 0 0.35em 0.6em;
+}
+
 /* hidden -- must be at end */
 
 .hidden {

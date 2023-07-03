@@ -1,5 +1,5 @@
 import { LoomSettings, NoteState } from "./common";
-import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, Menu, Modal, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import { Range } from "@codemirror/state";
 import {
   Decoration,
@@ -636,3 +636,122 @@ export const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
     },
   },
 };
+
+export class MakePromptFromPassagesModal extends Modal {
+  getSettings: () => LoomSettings;
+
+  constructor(app: App, getSettings: () => LoomSettings) {
+	super(app);
+	this.getSettings = getSettings;
+  }
+
+  onOpen() {
+	this.contentEl.createDiv({
+	  cls: "modal-title",
+	  text: "Make prompt from passages",
+	});
+
+    const pathPrefix = this.getSettings().passageFolder.trim().replace(/\/?$/, "/");
+	const passages = this.app.vault.getFiles().filter((file) =>
+	  file.path.startsWith(pathPrefix) && file.extension === "md"
+	).sort((a, b) => b.stat.mtime - a.stat.mtime);
+
+	let selectedPassages: string[] = [];
+
+	const unselectedContainer = this.contentEl.createDiv({
+	  cls: "loom__passage-list",
+	});
+	this.contentEl.createDiv({
+	  cls: "loom__selected-passages-title",
+	  text: "Selected passages",
+	});
+	const selectedContainer = this.contentEl.createDiv({
+	  cls: "loom__passage-list loom__selected-passage-list",
+	});
+	let button: HTMLElement;
+
+	const cleanName = (name: string) => name.slice(pathPrefix.length, -3);
+
+	const renderPassageList = () => {
+	  unselectedContainer.empty();
+	  selectedContainer.empty();
+
+	  const unselectedPassages = passages.filter(
+		(passage) => !selectedPassages.includes(passage.path)
+	  );
+
+	  for (const passage of unselectedPassages) {
+        const passageContainer = unselectedContainer.createDiv({
+	      cls: "tree-item-self loom__passage"
+	    });
+	    passageContainer.createSpan({
+	  	  cls: "tree-item-inner",
+	  	  text: cleanName(passage.path),
+	    });
+        passageContainer.addEventListener("click", () => {
+	      selectedPassages.push(passage.path)
+		  renderPassageList();
+		});
+	  }
+
+      if (selectedPassages.length === 0) {
+		selectedContainer.createDiv({
+		  cls: "loom__no-passages-selected",
+		  text: "No passages selected.",
+		});
+	  }
+	  for (const passage of selectedPassages) {
+		const passageContainer = selectedContainer.createDiv({
+		  cls: "tree-item-self loom__passage",
+		});
+		passageContainer.createSpan({
+		  cls: "tree-item-inner",
+		  text: cleanName(passage),
+		});
+		passageContainer.addEventListener("click", () => {
+		  selectedPassages = selectedPassages.filter((p) => p !== passage);
+		  renderPassageList();
+		});
+	  }
+	};
+
+	let separator = this.getSettings().defaultPassageSeparator;
+	let passageFrontmatter = this.getSettings().defaultPassageFrontmatter;
+
+    new Setting(this.contentEl)
+	  .setName("Separator")
+	  .setDesc("Use \\n to denote a newline.")
+	  .addText((text) =>
+		text.setValue(separator).onChange((value) => (separator = value)));
+	new Setting(this.contentEl)
+	  .setName("Passage frontmatter")
+	  .setDesc("This will be added before each passage and at the end. %n: 1, 2, 3..., %r: I, II, III...")
+	  .addText((text) =>
+		text.setValue(passageFrontmatter).onChange((value) => (passageFrontmatter = value)));
+
+	const buttonContainer = this.contentEl.createDiv({
+	  cls: "modal-button-container",
+	});
+	button = buttonContainer.createEl("button", {
+	  cls: "mod-cta",
+	  text: "Submit",
+	});
+	button.addEventListener("click", () => {
+	  if (selectedPassages.length === 0) return;
+
+	  this.app.workspace.trigger(
+		"loom:make-prompt-from-passages",
+		selectedPassages,
+		separator,
+		passageFrontmatter,
+	  );
+	  this.close();
+	});
+
+	renderPassageList();
+  }
+
+  onClose() {
+	this.contentEl.empty();
+  }
+}
