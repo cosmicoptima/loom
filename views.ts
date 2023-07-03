@@ -333,9 +333,9 @@ export class LoomView extends ItemView {
 	    selfArgMenuItem("Hoist", "arrow-up", "loom:hoist");
 	  
 	  if (node.bookmarked)
-	    selfArgMenuItem("Remove bookmark", "bookmark", "loom:toggle-bookmark");
+	    selfArgMenuItem("Remove bookmark", "bookmark-minus", "loom:toggle-bookmark");
 	  else
-	    selfArgMenuItem("Bookmark", "bookmark-minus", "loom:toggle-bookmark");
+	    selfArgMenuItem("Bookmark", "bookmark", "loom:toggle-bookmark");
 
 	  menu.addSeparator();
 	  selfArgMenuItem("Create child", "plus", "loom:create-child");
