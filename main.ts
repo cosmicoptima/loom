@@ -1092,7 +1092,7 @@ export default class LoomPlugin extends Plugin {
 	// show the "Generating..." indicator in the loom view
 	this.renderLoomViews();
 
-    let prompt = `<|endoftext|>${this.fullText(file, rootNode)}`;
+    let prompt = `${this.fullText(file, rootNode)}`;
 	
     // remove a trailing space if there is one
     // store whether there was, so it can be added back post-completion
@@ -1212,7 +1212,7 @@ export default class LoomPlugin extends Plugin {
   }
 
   trimOpenAIPrompt(prompt: string) {
-    const cl100kModels = ["gpt-4-32k", "gpt-4-0314", "gpt-4-32k-0314", "gpt-3.5-turbo", "gpt-3.5-turbo-0301"];
+    const cl100kModels = ["gpt-4-32k", "gpt-4-0314", "gpt-4-32k-0314", "gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4-base"];
 	const p50kModels = ["text-davinci-003", "text-davinci-002", "code-davinci-002", "code-davinci-001", "code-cushman-002", "code-cushman-001", "davinci-codex", "cushman-codex"];
 	// const r50kModels = ["text-davinci-001", "text-curie-001", "text-babbage-001", "text-ada-001", "davinci", "curie", "babbage", "ada"];
 
