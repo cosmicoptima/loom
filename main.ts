@@ -1211,6 +1211,35 @@ export default class LoomPlugin extends Plugin {
 	return result;
   }
 
+      maxTokenLength(model: string) {
+          if (model === 'gpt-4-32k') {
+            return 32769;
+          } else if (model.startsWith('gpt-4')) {
+            return 8193;
+          } else if (model === 'code-davinci-002') {
+            return 8001;
+          } else if (model.startsWith('code')) {
+            throw new Error("Unknown maximum");
+          } else if (model === 'gpt-3.5-turbo-16k') {
+            return 16385;
+          } else if (model === 'gpt-3.5-turbo') {
+            return 4097;
+          } else if (model === 'text-davinci-003' || model === 'text-davinci-002') {
+            return 4097;
+          } else if (
+            model.includes("ada") ||
+            model.includes("babbage") ||
+            model.includes("curie") ||
+            model.includes("davinci") ||
+            model.includes("cushman")
+          ) {
+            return 2049;
+          } else {
+            return 2000;
+          }
+    }
+
+
   trimOpenAIPrompt(prompt: string) {
     const cl100kModels = ["gpt-4-32k", "gpt-4-0314", "gpt-4-32k-0314", "gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4-base"];
 	const p50kModels = ["text-davinci-003", "text-davinci-002", "code-davinci-002", "code-davinci-001", "code-cushman-002", "code-cushman-001", "davinci-codex", "cushman-codex"];
@@ -1221,7 +1250,7 @@ export default class LoomPlugin extends Plugin {
 	else if (p50kModels.includes(this.settings.model)) tokenizer = p50k;
     else tokenizer = r50k; // i expect that an unknown model will most likely be r50k
 
-	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-8000)); // TODO context length depends on model
+	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-this.maxTokenLength(this.settings.model)+1)); // TODO context length depends on model
   }
 
   async completeOCP(prompt: string) {
