@@ -61,7 +61,14 @@ body {
   flex-grow: 1;
 }
 .loom__alt-export-field button {
-  margin-left: 0.5em;
+  margin-left: 0.6em;
+}
+
+/* search bar */
+
+.loom__search-bar {
+  width: 100%;
+  margin-bottom: 0.8em;
 }
 
 /* settings */
@@ -129,6 +136,19 @@ body {
   align-items: center;
   margin-left: 0.3em;
   margin-right: -0.3em;
+}
+
+.loom__node-search-result {
+  background-color: rgba(255, 255, 0, 0.1);
+}
+.loom__node-search-result.is-active {
+  background-color: rgba(255, 255, 0, 0.2);
+}
+.loom__node-search-result:hover {
+  background-color: rgba(255, 255, 0, 0.2) !important;
+}
+.loom__node-search-result:not(:hover) {
+  padding-right: 0.3em;
 }
 
 .loom__node-unread {

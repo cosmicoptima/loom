@@ -28,9 +28,12 @@ export interface LoomSettings {
   n: number;
 
   showSettings: boolean;
+  showSearchBar: boolean;
   showNodeBorders: boolean;
   showExport: boolean;
 }
+
+export type SearchResultState = "result" | "ancestor" | "none" | null;
 
 export interface Node {
   text: string;
@@ -39,11 +42,13 @@ export interface Node {
   unread: boolean;
   bookmarked: boolean;
   lastVisited?: number;
+  searchResultState: SearchResultState;
 }
 
 export interface NoteState {
   current: string;
   hoisted: string[];
+  searchTerm: string;
   nodes: Record<string, Node>;
   generating: string | null;
 }

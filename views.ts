@@ -15,6 +15,8 @@ export class LoomView extends ItemView {
   getNoteState: () => NoteState | null;
   getSettings: () => LoomSettings;
 
+  tree: HTMLElement;
+
   constructor(
     leaf: WorkspaceLeaf,
 	getNoteState: () => NoteState | null,
@@ -42,6 +44,7 @@ export class LoomView extends ItemView {
 	this.renderNavButtons(settings);
 	const container = this.containerEl.createDiv({ cls: "outline" });
 	if (settings.showExport) this.renderAltExportInterface(container);
+	if (settings.showSearchBar) this.renderSearchBar(container, state);
 	if (settings.showSettings) this.renderSettings(container, settings);
 
 	if (!state) {
@@ -49,7 +52,8 @@ export class LoomView extends ItemView {
 	  return;
 	}
 	this.renderBookmarks(container, state);
-	this.renderTree(container, state);
+	this.tree = container.createDiv();
+	this.renderTree(this.tree, state);
 
 	this.containerEl.scrollTop = scroll;
   }
@@ -80,6 +84,12 @@ export class LoomView extends ItemView {
       settings.showSettings,
       "settings",
       "Show settings"
+    );
+    settingNavButton(
+      "showSearchBar",
+      settings.showSearchBar,
+      "search",
+      "Show search bar"
     );
     settingNavButton(
       "showNodeBorders",
@@ -139,6 +149,19 @@ export class LoomView extends ItemView {
 
 	exportButton.addEventListener("click", () => {
 	  if (exportInput.value) this.app.workspace.trigger("loom:export", exportInput.value);
+	});
+  }
+
+  renderSearchBar(container: HTMLElement, state: NoteState | null) {
+	const searchBar = container.createEl("input", {
+	  cls: "loom__search-bar",
+	  value: state?.searchTerm || "",
+	  attr: { type: "text", placeholder: "Search..." },
+	});
+	searchBar.addEventListener("input", () => {
+	  const state = this.getNoteState();
+	  this.app.workspace.trigger("loom:search", searchBar.value);
+	  if (state) this.renderTree(this.tree, state);
 	});
   }
 
@@ -230,12 +253,18 @@ export class LoomView extends ItemView {
   }
 
   renderTree(container: HTMLElement, state: NoteState) {
+    container.empty();
+
     const treeHeader = container.createDiv({
 	  cls: "tree-item-self loom__tree-header"
 	});
+	let headerText;
+	if (state.searchTerm) headerText = "Search results";
+	else if (state.hoisted.length > 0) headerText = "Hoisted node";
+	else headerText = "All nodes";
 	treeHeader.createSpan({
 	  cls: "tree-item-inner loom__tree-header-text",
-	  text: state.hoisted.length > 0 ? "Hoisted node" : "All nodes"
+	  text: headerText,
 	});
 
 	if (state.hoisted.length > 0)
@@ -257,6 +286,8 @@ export class LoomView extends ItemView {
   ) {
 	const node = state.nodes[id];
 
+	if (inTree && node.searchResultState === "none") return;
+
 	const branchContainer = container.createDiv({});
 
     const nodeContainer = branchContainer.createDiv({
@@ -264,6 +295,8 @@ export class LoomView extends ItemView {
 	  attr: { id: inTree ? `loom__node-${id}` : null },
 	});
 	if (id === state.current) nodeContainer.addClass("is-active");
+	if (node.searchResultState === "result")
+	  nodeContainer.addClass("loom__node-search-result");
 	if (node.unread) nodeContainer.addClass("loom__node-unread");
 
 	const children = Object.entries(state.nodes)

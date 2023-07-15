@@ -5,7 +5,14 @@ import {
   loomEditorPluginSpec,
   MakePromptFromPassagesModal,
 } from './views';
-import { PROVIDERS, Provider, LoomSettings, Node, NoteState } from './common';
+import {
+  PROVIDERS,
+  Provider,
+  LoomSettings,
+  SearchResultState,
+  Node,
+  NoteState
+} from './common';
 
 import {
   App,
@@ -69,6 +76,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   n: 5,
 
   showSettings: false,
+  showSearchBar: false,
   showNodeBorders: false,
   showExport: false,
 };
@@ -153,6 +161,7 @@ export default class LoomPlugin extends Plugin {
 	  collapsed: false,
 	  unread,
 	  bookmarked: false,
+	  searchResultState: null,
 	};
 	return [id, node];
   }
@@ -162,6 +171,7 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path] = {
 	  current: rootId,
       hoisted: [] as string[],
+	  searchTerm: "",
       nodes: { [rootId]: root },
 	  generating: null,
     };
@@ -582,6 +592,7 @@ export default class LoomPlugin extends Plugin {
             this.state[view.file.path] = {
               current,
               hoisted: [] as string[],
+			  searchTerm: "",
               nodes: { [current]: node },
               generating: null,
             };
@@ -919,6 +930,45 @@ export default class LoomPlugin extends Plugin {
         }
       )
     );
+
+	this.registerEvent(
+	  // @ts-expect-error
+	  this.app.workspace.on("loom:search", (term: string) => this.withFile((file) => {
+		const state = this.state[file.path];
+
+        this.state[file.path].searchTerm = term;
+		if (!term) {
+		  Object.keys(state.nodes).forEach((id) => {
+		    this.state[file.path].nodes[id].searchResultState = null;
+		  });
+		  this.save(); // don't re-render
+		  return;
+		}
+
+		const matches = Object.entries(state.nodes)
+		  .filter(([, node]) => node.text.toLowerCase().includes(term.toLowerCase()))
+		  .map(([id]) => id);
+
+		let ancestors: string[] = [];
+		for (const id of matches) {
+		  let parentId = state.nodes[id].parentId;
+		  while (parentId !== null) {
+			ancestors.push(parentId);
+			parentId = state.nodes[parentId].parentId;
+		  }
+		}
+
+		Object.keys(state.nodes).forEach((id) => {
+		  let searchResultState: SearchResultState;
+		  if (matches.includes(id)) searchResultState = "result";
+		  else if (ancestors.includes(id)) searchResultState = "ancestor";
+		  else searchResultState = "none";
+		  this.state[file.path].nodes[id].searchResultState = searchResultState;
+		});
+
+		this.save();
+	  }))
+	);
 
     this.registerEvent(
       // @ts-expect-error
