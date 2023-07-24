@@ -205,7 +205,7 @@ export default class LoomPlugin extends Plugin {
     return text;
   }
 
-  breakAtPoint(file: TFile): string {
+  breakAtPoint(file: TFile): (string | null)[] {
     // split the current node into:
     //   - parent node with text before cursor
     //   - child node with text after cursor
@@ -230,7 +230,7 @@ export default class LoomPlugin extends Plugin {
       if (i < familyTexts[n].length) break;
 	  // if the cursor is at the end of the last node, don't split, just return the current node
       if (n === family.length - 1)
-		return current;
+		return [current, null];
       i -= familyTexts[n].length;
       n++;
     }
@@ -257,7 +257,7 @@ export default class LoomPlugin extends Plugin {
     // move the children to under the after node
     children.forEach((child) => (child.parentId = childId));
 
-    return parentNode;
+    return [parentNode, childId];
   }
 
   async onload() {
@@ -368,6 +368,16 @@ export default class LoomPlugin extends Plugin {
       checkCallback: (checking: boolean) =>
         withState(checking, (state) => {
           this.app.workspace.trigger("loom:break-at-point", state.current);
+        }),
+      hotkeys: [{ modifiers: ["Alt"], key: "s" }],
+    });
+
+    this.addCommand({
+      id: "break-at-point-create-child",
+      name: "Split at current point and create child",
+      checkCallback: (checking: boolean) =>
+        withState(checking, (state) => {
+          this.app.workspace.trigger("loom:break-at-point-create-child", state.current);
         }),
       hotkeys: [{ modifiers: ["Alt"], key: "c" }],
     });
@@ -776,7 +786,17 @@ export default class LoomPlugin extends Plugin {
       // @ts-expect-error
       this.app.workspace.on("loom:break-at-point", () =>
         this.withFile((file) => {
-          const parentId = this.breakAtPoint(file);
+          const [, childId] = this.breakAtPoint(file);
+		  if (childId) this.app.workspace.trigger("loom:switch-to", childId);
+		})
+      )
+    );
+
+    this.registerEvent(
+      // @ts-expect-error
+      this.app.workspace.on("loom:break-at-point-create-child", () =>
+        this.withFile((file) => {
+          const [parentId] = this.breakAtPoint(file);
           if (parentId !== undefined) {
 			const [newId, newNode] = this.newNode("", parentId);
 			this.state[file.path].nodes[newId] = newNode;

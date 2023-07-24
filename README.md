@@ -16,7 +16,8 @@ If you are interested in funding this plugin's development, you can **[support m
 
 - generate - `Ctrl+Space`
 - generate siblings - `Ctrl+Shift+Space`
-- split at point - `Alt+c`
+- split at point - `Alt+s`
+- split at point and create child - `Alt+c`
 - delete (current node) - `Alt+Backspace`
 - merge (current node) with parent - `Alt+m`
 
@@ -43,7 +44,7 @@ Alternatively, you can build Loom from source:
 3. Go to the "Community plugins" tab in Obsidian settings, then enable "Loom"
 4. To update, go to the repository and `git pull; npm i; npm run build`, then disable and re-enable Loom
 
-**If you are using MacOS:** a few hotkeys -- `Alt+c` and `Alt+m` -- are bound to special characters. You can either:
+**If you are using MacOS:** a few hotkeys -- `Alt+s`, `Alt+c`, and `Alt+m` -- are bound to special characters. You can either:
 
 1. Disable MacOS's special character shortcuts, as explained here: https://superuser.com/questions/941286/disable-default-option-key-binding
 2. Rebind the Loom hotkeys you want to use in the Hotkeys tab in Settings
