@@ -71,6 +71,10 @@ body {
   margin-bottom: 0.8em;
 }
 
+.loom__search-bar-no-results {
+  background-color: rgba(var(--background-modifier-error-rgb), 0.2) !important;
+}
+
 /* settings */
 
 .loom__settings {
@@ -182,8 +186,13 @@ body {
 
 .loom__node-button {
   display: inline-flex !important;
-  margin-left: 0.1em;
+  margin-left: -0.025em;
+  padding: 0.1em 0.075em;
+  border-radius: 0.2em;
   --icon-size: 1.1rem;
+}
+.loom__node-button:hover {
+  background-color: var(--nav-item-background-active);
 }
 
 .loom__node-footer {

@@ -156,12 +156,17 @@ export class LoomView extends ItemView {
 	const searchBar = container.createEl("input", {
 	  cls: "loom__search-bar",
 	  value: state?.searchTerm || "",
-	  attr: { type: "text", placeholder: "Search..." },
+	  attr: { type: "text", placeholder: "Search" },
 	});
 	searchBar.addEventListener("input", () => {
 	  const state = this.getNoteState();
 	  this.app.workspace.trigger("loom:search", searchBar.value);
-	  if (state) this.renderTree(this.tree, state);
+	  if (state) {
+		this.renderTree(this.tree, state);
+	    if (Object.values(state.nodes).every((node) => node.searchResultState === "none"))
+	  	  searchBar.addClass("loom__search-bar-no-results");
+	    else searchBar.removeClass("loom__search-bar-no-results");
+	  }
 	});
   }
 
@@ -259,8 +264,10 @@ export class LoomView extends ItemView {
 	  cls: "tree-item-self loom__tree-header"
 	});
 	let headerText;
-	if (state.searchTerm) headerText = "Search results";
-	else if (state.hoisted.length > 0) headerText = "Hoisted node";
+	if (state.searchTerm) {
+	  if (state.hoisted.length > 0) headerText = "Search results under hoisted node";
+      else headerText = "Search results";
+	} else if (state.hoisted.length > 0) headerText = "Hoisted node";
 	else headerText = "All nodes";
 	treeHeader.createSpan({
 	  cls: "tree-item-inner loom__tree-header-text",
@@ -345,7 +352,7 @@ export class LoomView extends ItemView {
 	  .filter(([, node]) => node.parentId === null)
 	const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
 	
-	const showMenu = () => {
+	const showMenu = (event) => {
       const menu = new Menu();
 
 	  const menuItem = (name: string, icon: string, callback: () => void) =>
@@ -388,13 +395,12 @@ export class LoomView extends ItemView {
 		selfArgMenuItem("Delete", "trash", "loom:delete");
 	  }
 	  
-	  const rect = nodeContainer.getBoundingClientRect();
-	  menu.showAtPosition({ x: rect.right, y: rect.top });
+	  menu.showAtMouseEvent(event);
 	}
 
 	nodeContainer.addEventListener("contextmenu", (event) => {
 	  event.preventDefault();
-	  showMenu();
+	  showMenu(event);
 	});
 
 	// add buttons on hover

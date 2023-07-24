@@ -1442,22 +1442,6 @@ class LoomSettingTab extends PluginSettingTab {
     method2.createEl("kbd", { text: "Loom: Open Loom pane" });
     method2.createEl("span", { text: " command." });
 
-    new Setting(containerEl).setName("Provider").addDropdown((dropdown) => {
-      dropdown.addOption("cohere", "Cohere");
-      dropdown.addOption("textsynth", "TextSynth");
-      dropdown.addOption("ocp", "OpenAI code-davinci-002 proxy");
-      dropdown.addOption("openai", "OpenAI (Completion)");
-      dropdown.addOption("openai-chat", "OpenAI (Chat)");
-      dropdown.addOption("azure", "Azure (Completion)");
-      dropdown.addOption("azure-chat", "Azure (Chat)");
-      dropdown.setValue(this.plugin.settings.provider);
-      dropdown.onChange(async (value) => {
-        if (PROVIDERS.find((provider) => provider === value))
-          this.plugin.settings.provider = value;
-        await this.plugin.save();
-      });
-    });
-
     const apiKeySetting = (name: string, key: LoomSettingStringKey) => {
       new Setting(containerEl)
         .setName(`${name} API key`)
@@ -1489,10 +1473,6 @@ class LoomSettingTab extends PluginSettingTab {
 
 	const idSetting = (name: string, key: LoomSettingKey) =>
 	  setting(name, key, (value) => value, (text) => text);
-	const intSetting = (name: string, key: LoomSettingKey) =>
-	  setting(name, key, (value) => value.toString(), (text) => parseInt(text));
-	const floatSetting = (name: string, key: LoomSettingKey) =>
-      setting(name, key, (value) => value.toString(), (text) => parseFloat(text));
 
     apiKeySetting("Cohere", "cohereApiKey");
     apiKeySetting("TextSynth", "textsynthApiKey");
@@ -1525,13 +1505,5 @@ class LoomSettingTab extends PluginSettingTab {
 	
     idSetting("Default passage separator", "defaultPassageSeparator");
     idSetting("Default passage frontmatter", "defaultPassageFrontmatter");
-	
-	idSetting("Model", "model");
-	intSetting("Length (in tokens)", "maxTokens");
-	floatSetting("Temperature", "temperature");
-	floatSetting("Top p", "topP");
-	floatSetting("Frequency penalty", "frequencyPenalty");
-	floatSetting("Presence penalty", "presencePenalty");
-	floatSetting("Number of completions", "n");
   }
 }
