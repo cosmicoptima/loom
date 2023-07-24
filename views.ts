@@ -352,7 +352,7 @@ export class LoomView extends ItemView {
 	  .filter(([, node]) => node.parentId === null)
 	const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
 	
-	const showMenu = (event) => {
+	const showMenu = (event: MouseEvent) => {
       const menu = new Menu();
 
 	  const menuItem = (name: string, icon: string, callback: () => void) =>
@@ -409,7 +409,7 @@ export class LoomView extends ItemView {
 	  cls: "loom__node-buttons"
 	});
 
-	const button = (label: string, icon: string, callback: () => void) => {
+	const button = (label: string, icon: string, callback: (event: MouseEvent) => void) => {
 	  const button_ = nodeButtonsContainer.createDiv({
 		cls: "loom__node-button",
 		attr: { "aria-label": label },
