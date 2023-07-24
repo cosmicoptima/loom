@@ -1,4 +1,4 @@
-import { LoomSettings, NoteState } from "./common";
+import { LoomSettings, Node, NoteState } from "./common";
 import { App, ItemView, Menu, Modal, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import { Range } from "@codemirror/state";
 import {
@@ -10,6 +10,61 @@ import {
   WidgetType,
 } from "@codemirror/view";
 const dialog = require("electron").remote.dialog;
+
+interface MenuContext {
+  app: App;
+  event: MouseEvent;
+  state: NoteState;
+  id: string;
+  node: Node;
+  deletable: boolean;
+}
+
+const showNodeMenu = ({ app, event, state, id, node, deletable }: MenuContext) => {
+  const menu = new Menu();
+
+  const menuItem = (name: string, icon: string, callback: () => void) =>
+    menu.addItem((item) => {
+      item.setTitle(name);
+	  item.setIcon(icon);
+	  item.onClick(callback);
+	});
+  
+  const zeroArgMenuItem = (name: string, icon: string, event: string) =>
+    menuItem(name, icon, () => app.workspace.trigger(event));
+  const selfArgMenuItem = (name: string, icon: string, event: string) =>
+    menuItem(name, icon, () => app.workspace.trigger(event, id));
+  
+  if (state.hoisted[state.hoisted.length - 1] === id)
+    zeroArgMenuItem("Unhoist", "arrow-down", "loom:unhoist");
+  else
+    selfArgMenuItem("Hoist", "arrow-up", "loom:hoist");
+  
+  if (node.bookmarked)
+    selfArgMenuItem("Remove bookmark", "bookmark-minus", "loom:toggle-bookmark");
+  else
+    selfArgMenuItem("Bookmark", "bookmark", "loom:toggle-bookmark");
+
+  menu.addSeparator();
+  selfArgMenuItem("Create child", "plus", "loom:create-child");
+  selfArgMenuItem("Create sibling", "list-plus", "loom:create-sibling");
+
+  menu.addSeparator();
+  selfArgMenuItem("Delete all children", "x", "loom:clear-children");
+  selfArgMenuItem("Delete all siblings", "list-x", "loom:clear-siblings");
+
+  if (node.parentId !== null) {
+    menu.addSeparator();
+	selfArgMenuItem("Merge with parent", "arrow-up-left", "loom:merge-with-parent");
+  }
+
+  if (deletable) {
+	menu.addSeparator();
+	selfArgMenuItem("Delete", "trash", "loom:delete");
+  }
+  
+  menu.showAtMouseEvent(event);
+}
 
 export class LoomView extends ItemView {
   getNoteState: () => NoteState | null;
@@ -345,62 +400,13 @@ export class LoomView extends ItemView {
 	  this.app.workspace.trigger("loom:switch-to", id)
 	);
 
-	// define `showMenu`,
-	// which is triggered by pressing the menu button or right-clicking the node
-
 	const rootNodes = Object.entries(state.nodes)
 	  .filter(([, node]) => node.parentId === null)
 	const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
 	
-	const showMenu = (event: MouseEvent) => {
-      const menu = new Menu();
-
-	  const menuItem = (name: string, icon: string, callback: () => void) =>
-	    menu.addItem((item) => {
-          item.setTitle(name);
-		  item.setIcon(icon);
-		  item.onClick(callback);
-		});
-	  
-	  const zeroArgMenuItem = (name: string, icon: string, event: string) =>
-	    menuItem(name, icon, () => this.app.workspace.trigger(event));
-	  const selfArgMenuItem = (name: string, icon: string, event: string) =>
-	    menuItem(name, icon, () => this.app.workspace.trigger(event, id));
-	  
-	  if (state.hoisted[state.hoisted.length - 1] === id)
-	    zeroArgMenuItem("Unhoist", "arrow-down", "loom:unhoist");
-	  else
-	    selfArgMenuItem("Hoist", "arrow-up", "loom:hoist");
-	  
-	  if (node.bookmarked)
-	    selfArgMenuItem("Remove bookmark", "bookmark-minus", "loom:toggle-bookmark");
-	  else
-	    selfArgMenuItem("Bookmark", "bookmark", "loom:toggle-bookmark");
-
-	  menu.addSeparator();
-	  selfArgMenuItem("Create child", "plus", "loom:create-child");
-	  selfArgMenuItem("Create sibling", "list-plus", "loom:create-sibling");
-
-	  menu.addSeparator();
-	  selfArgMenuItem("Delete all children", "x", "loom:clear-children");
-	  selfArgMenuItem("Delete all siblings", "list-x", "loom:clear-siblings");
-
-	  if (node.parentId !== null) {
-        menu.addSeparator();
-		selfArgMenuItem("Merge with parent", "arrow-up-left", "loom:merge-with-parent");
-	  }
-
-      if (deletable) {
-		menu.addSeparator();
-		selfArgMenuItem("Delete", "trash", "loom:delete");
-	  }
-	  
-	  menu.showAtMouseEvent(event);
-	}
-
 	nodeContainer.addEventListener("contextmenu", (event) => {
 	  event.preventDefault();
-	  showMenu(event);
+	  showNodeMenu({ app: this.app, event, state, id, node, deletable });
 	});
 
 	// add buttons on hover
@@ -418,7 +424,7 @@ export class LoomView extends ItemView {
 	  button_.addEventListener("click", callback);
 	};
 
-	button("Show menu", "menu", showMenu);
+	button("Show menu", "menu", (event) => showNodeMenu({ app: this.app, event, state, id, node, deletable }));
 
 	if (state.hoisted[state.hoisted.length - 1] === id)
 	  button("Unhoist", "arrow-down", () => this.app.workspace.trigger("loom:unhoist"));
@@ -544,6 +550,14 @@ export class LoomSiblingsView extends ItemView {
 	  nodeContainer.addEventListener("click", () =>
 	    this.app.workspace.trigger("loom:switch-to", id)
 	  );
+
+	  const rootNodes = Object.entries(state.nodes)
+	    .filter(([, node]) => node.parentId === null)
+	  const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
+	  nodeContainer.addEventListener("contextmenu", (event) => {
+		event.preventDefault();
+		showNodeMenu({ app: this.app, event, state, id, node, deletable });
+	  });
 
 	  if (parseInt(i) !== siblings.length - 1)
 	    container.createEl("hr", { cls: "loom__sibling-separator" });

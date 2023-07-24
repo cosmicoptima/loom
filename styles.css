@@ -188,7 +188,7 @@ body {
   display: inline-flex !important;
   margin-left: -0.025em;
   padding: 0.1em 0.075em;
-  border-radius: 0.2em;
+  border-radius: 0.25em;
   --icon-size: 1.1rem;
 }
 .loom__node-button:hover {
