@@ -6,7 +6,6 @@ import {
   MakePromptFromPassagesModal,
 } from './views';
 import {
-  PROVIDERS,
   Provider,
   LoomSettings,
   SearchResultState,
@@ -492,7 +491,7 @@ export default class LoomPlugin extends Plugin {
           checking,
           (state) => canDelete(state, state.current, checking),
           (state) => {
-            this.app.workspace.trigger("loom:delete", state.current);
+            this.app.workspace.trigger("loom:delete", [state.current]);
           }
         ),
       hotkeys: [{ modifiers: ["Alt"], key: "Backspace" }],
@@ -828,25 +827,26 @@ export default class LoomPlugin extends Plugin {
 
 		  // switch to the merged node and delete the child node
           this.app.workspace.trigger("loom:switch-to", parentId);
-          this.app.workspace.trigger("loom:delete", id);
+          this.app.workspace.trigger("loom:delete", [id]);
         })
       )
     );
 
     this.registerEvent(
       // @ts-expect-error
-      this.app.workspace.on("loom:delete", (id: string) =>
+      this.app.workspace.on("loom:delete", (ids: string[]) =>
         this.wftsar((file) => {
 		  const state = this.state[file.path];
-		  if (!canDelete(state, id, false)) return;
-		  const parentId = state.nodes[id].parentId;
 
-		  // remove the node from the hoist stack
-          this.state[file.path].hoisted = state.hoisted.filter((id_) => id_ !== id);
+		  ids = ids.filter((id) => canDelete(state, id, false));
+		  if (ids.length === 0) return;
 
-		  // add the node and its descendants to a list of nodes to delete
+		  // remove the nodes from the hoist stack
+          this.state[file.path].hoisted = state.hoisted.filter((id) => !ids.includes(id));
 
-		  let deleted = [id];
+		  // add the nodes and their descendants to a list of nodes to delete
+
+		  let deleted = [...ids];
 
 		  const addChildren = (id: string) => {
 			const children = Object.entries(state.nodes)
@@ -855,10 +855,11 @@ export default class LoomPlugin extends Plugin {
 			deleted = deleted.concat(children);
 			children.forEach(addChildren);
 		  }
-		  addChildren(id);
+		  ids.forEach(addChildren);
 
 		  // if the current node will be deleted, switch to its next sibling or its closest ancestor
 		  if (deleted.includes(state.current)) {
+            const parentId = state.nodes[state.current].parentId;
 	    	const siblings = Object.entries(state.nodes)
 	    	  .filter(([, node]) => node.parentId === parentId)
 	    	  .map(([id]) => id);
@@ -908,8 +909,7 @@ export default class LoomPlugin extends Plugin {
           const children = Object.entries(this.state[file.path].nodes)
 		    .filter(([, node]) => node.parentId === id)
 			.map(([id]) => id);
-          for (const id of children)
-            this.app.workspace.trigger("loom:delete", id);
+		  this.app.workspace.trigger("loom:delete", children);
         })
       )
     );
@@ -922,8 +922,7 @@ export default class LoomPlugin extends Plugin {
           const siblings = Object.entries(this.state[file.path].nodes)
 		    .filter(([id_, node]) => node.parentId === parentId && id_ !== id)
 			.map(([id]) => id);
-          for (const id of siblings)
-            this.app.workspace.trigger("loom:delete", id);
+		  this.app.workspace.trigger("loom:delete", siblings);
         })
       )
     );

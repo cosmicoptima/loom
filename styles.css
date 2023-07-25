@@ -249,8 +249,11 @@ body {
   margin: 0.2em 0;
   padding: 0.8em;
   white-space: pre-wrap;
+
+  position: relative;
 }
 .loom__sibling:hover {
+  background-color: var(--nav-item-background-active);
   color: var(--nav-item-color-active);
 }
 .loom__sibling.is-active {
@@ -261,6 +264,21 @@ body {
 .loom__sibling-ellipsis {
   color: var(--text-faint);
   margin-right: 0.3em;
+}
+
+.loom__sibling-buttons {
+  display: none;
+
+  background-color: rgba(16, 16, 16, 0.6);
+  border-radius: 0.3em;
+  padding: 0.2em;
+
+  position: absolute;
+  right: 0.5em;
+  top: 0.5em;
+}
+.loom__sibling:hover .loom__sibling-buttons {
+  display: inline-flex !important;
 }
 
 .loom__sibling-separator {

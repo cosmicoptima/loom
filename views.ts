@@ -11,16 +11,15 @@ import {
 } from "@codemirror/view";
 const dialog = require("electron").remote.dialog;
 
-interface MenuContext {
+interface NodeContext {
   app: App;
-  event: MouseEvent;
   state: NoteState;
   id: string;
   node: Node;
   deletable: boolean;
 }
 
-const showNodeMenu = ({ app, event, state, id, node, deletable }: MenuContext) => {
+const showNodeMenu = (event: MouseEvent, { app, state, id, node, deletable }: NodeContext) => {
   const menu = new Menu();
 
   const menuItem = (name: string, icon: string, callback: () => void) =>
@@ -34,6 +33,8 @@ const showNodeMenu = ({ app, event, state, id, node, deletable }: MenuContext) =
     menuItem(name, icon, () => app.workspace.trigger(event));
   const selfArgMenuItem = (name: string, icon: string, event: string) =>
     menuItem(name, icon, () => app.workspace.trigger(event, id));
+  const selfListArgMenuItem = (name: string, icon: string, event: string) =>
+    menuItem(name, icon, () => app.workspace.trigger(event, [id]));
   
   if (state.hoisted[state.hoisted.length - 1] === id)
     zeroArgMenuItem("Unhoist", "arrow-down", "loom:unhoist");
@@ -60,11 +61,45 @@ const showNodeMenu = ({ app, event, state, id, node, deletable }: MenuContext) =
 
   if (deletable) {
 	menu.addSeparator();
-	selfArgMenuItem("Delete", "trash", "loom:delete");
+	selfListArgMenuItem("Delete", "trash", "loom:delete");
   }
   
   menu.showAtMouseEvent(event);
 }
+
+const renderNodeButtons = (
+  container: HTMLElement,
+  { app, state, id, node, deletable }: NodeContext
+) => {
+  const button = (label: string, icon: string, callback: (event: MouseEvent) => void) => {
+	const button_ = container.createDiv({
+	  cls: "loom__node-button",
+	  attr: { "aria-label": label },
+	});
+	setIcon(button_, icon);
+	button_.addEventListener("click", event => { event.stopPropagation(); callback(event); });
+  };
+
+  button("Show menu", "menu", (event) => showNodeMenu(event, { app, state, id, node, deletable }));
+
+  if (state.hoisted[state.hoisted.length - 1] === id)
+	button("Unhoist", "arrow-down", () => app.workspace.trigger("loom:unhoist"));
+  else button("Hoist", "arrow-up", () => app.workspace.trigger("loom:hoist", id));
+
+  if (node.bookmarked)
+	button(
+	  "Remove bookmark",
+	  "bookmark-minus",
+	  () => app.workspace.trigger("loom:toggle-bookmark", id)
+	);
+  else
+	button("Bookmark", "bookmark", () =>
+	  app.workspace.trigger("loom:toggle-bookmark", id)
+	);
+	
+  if (deletable)
+	button("Delete", "trash", () => app.workspace.trigger("loom:delete", [id]));
+};
 
 export class LoomView extends ItemView {
   getNoteState: () => NoteState | null;
@@ -403,10 +438,12 @@ export class LoomView extends ItemView {
 	const rootNodes = Object.entries(state.nodes)
 	  .filter(([, node]) => node.parentId === null)
 	const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
+
+	const nodeContext: NodeContext = { app: this.app, state, id, node, deletable };
 	
 	nodeContainer.addEventListener("contextmenu", (event) => {
 	  event.preventDefault();
-	  showNodeMenu({ app: this.app, event, state, id, node, deletable });
+	  showNodeMenu(event, nodeContext);
 	});
 
 	// add buttons on hover
@@ -415,34 +452,7 @@ export class LoomView extends ItemView {
 	  cls: "loom__node-buttons"
 	});
 
-	const button = (label: string, icon: string, callback: (event: MouseEvent) => void) => {
-	  const button_ = nodeButtonsContainer.createDiv({
-		cls: "loom__node-button",
-		attr: { "aria-label": label },
-	  });
-	  setIcon(button_, icon);
-	  button_.addEventListener("click", callback);
-	};
-
-	button("Show menu", "menu", (event) => showNodeMenu({ app: this.app, event, state, id, node, deletable }));
-
-	if (state.hoisted[state.hoisted.length - 1] === id)
-	  button("Unhoist", "arrow-down", () => this.app.workspace.trigger("loom:unhoist"));
-    else button("Hoist", "arrow-up", () => this.app.workspace.trigger("loom:hoist", id));
-
-	if (node.bookmarked)
-	  button(
-		"Remove bookmark",
-		"bookmark-minus",
-		() => this.app.workspace.trigger("loom:toggle-bookmark", id)
-	  );
-	else
-	  button("Bookmark", "bookmark", () =>
-		this.app.workspace.trigger("loom:toggle-bookmark", id)
-	  );
-	
-	if (deletable)
-	  button("Delete", "trash", () => this.app.workspace.trigger("loom:delete", id));
+	renderNodeButtons(nodeButtonsContainer, nodeContext);
 	
 	// indicate if loom is currently generating children for this node
 
@@ -554,9 +564,17 @@ export class LoomSiblingsView extends ItemView {
 	  const rootNodes = Object.entries(state.nodes)
 	    .filter(([, node]) => node.parentId === null)
 	  const deletable = rootNodes.length !== 1 || rootNodes[0][0] !== id;
+
+      const nodeContext: NodeContext = { app: this.app, state, id, node, deletable };
+
+	  const nodeButtonsContainer = nodeContainer.createDiv({
+		cls: "loom__sibling-buttons"
+	  });
+	  renderNodeButtons(nodeButtonsContainer, nodeContext);
+
 	  nodeContainer.addEventListener("contextmenu", (event) => {
 		event.preventDefault();
-		showNodeMenu({ app: this.app, event, state, id, node, deletable });
+		showNodeMenu(event, nodeContext);
 	  });
 
 	  if (parseInt(i) !== siblings.length - 1)
