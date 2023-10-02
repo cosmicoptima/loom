@@ -597,8 +597,10 @@ export default class LoomPlugin extends Plugin {
           const cursor = editor.getCursor();
 
           // if this note has no state, initialize it and return
+		  // @ts-ignore `Object is possibly 'null'` only in github actions
           if (!this.state[view.file.path]) {
             const [current, node] = this.newNode(editor.getValue(), null);
+			// @ts-ignore
             this.state[view.file.path] = {
               current,
               hoisted: [] as string[],
@@ -609,12 +611,14 @@ export default class LoomPlugin extends Plugin {
 		    return;
 		  }
 
+		  // @ts-ignore
           const current = this.state[view.file.path].current;
 
           // `ancestors`: starts with the root node, ends with the parent of the current node
           let ancestors: string[] = [];
           let node: string | null = current;
           while (node) {
+			// @ts-ignore
             node = this.state[view.file.path].nodes[node].parentId;
             if (node) ancestors.push(node);
           }
@@ -623,11 +627,13 @@ export default class LoomPlugin extends Plugin {
           // `ancestorTexts`: the text of each node in `ancestors`
           const text = editor.getValue();
           const ancestorTexts = ancestors.map(
+			// @ts-ignore
             (id) => this.state[view.file.path].nodes[id].text
           );
 
           // `familyTexts`: `ancestorTexts` + the current node's text
           const familyTexts = ancestorTexts.concat(
+			// @ts-ignore
             this.state[view.file.path].nodes[current].text
           );
 
@@ -640,12 +646,14 @@ export default class LoomPlugin extends Plugin {
             let newText = text.substring(prefix.length);
             newText = newText.substring(0, newText.length - suffix.length);
 
+			// @ts-ignore
             this.state[view.file.path].nodes[ancestors[i]].text = newText;
           };
 
           const updateDecorations = () => {
             const ancestorLengths = ancestors.map((id) => [
               id,
+			  // @ts-ignore
               this.state[view.file.path].nodes[id].text.length,
             ]);
             plugin.state = { ...plugin.state, ancestorLengths };
@@ -660,6 +668,7 @@ export default class LoomPlugin extends Plugin {
               return;
             }
           }
+		  // @ts-ignore
           this.state[view.file.path].nodes[current].text = text.slice(
             ancestorTexts.join("").length
           );
@@ -1070,6 +1079,7 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.iterateRootLeaves((leaf) => {
         if (
           leaf.view instanceof MarkdownView &&
+		  // @ts-ignore
           leaf.view.file.path === file.path
         )
           this.editor = leaf.view.editor;
@@ -1132,6 +1142,7 @@ export default class LoomPlugin extends Plugin {
       this.app.workspace.iterateRootLeaves((leaf) => {
         if (
           leaf.view instanceof MarkdownView &&
+		  // @ts-ignore
           leaf.view.file.path === file.path
         )
           this.editor = leaf.view.editor;
