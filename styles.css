@@ -40,12 +40,13 @@ body {
 
 .loom__view {
   overflow-y: auto;
+  padding: 0 0.6em;
 }
 
 /* nav buttons */
 
 .loom__nav-buttons {
-  margin-top: 0.5em;
+  margin: 0.5em 0 1em;
 }
 
 /* alt export field */

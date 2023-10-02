@@ -319,6 +319,7 @@ export class LoomView extends ItemView {
 	}
 
 	setting("Model", "model", settings.model, "string");
+	setting("Context length", "contextLength", String(settings.contextLength), "int");
 	setting("Length (in tokens)", "maxTokens", String(settings.maxTokens), "int");
 	setting("Number of completions", "n", String(settings.n), "int");
 	setting("Temperature", "temperature", String(settings.temperature), "float");

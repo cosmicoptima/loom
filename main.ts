@@ -67,6 +67,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
   provider: "ocp",
   model: "code-davinci-002",
+  contextLength: 8000,
   maxTokens: 60,
   temperature: 1,
   topP: 1,
@@ -1230,7 +1231,7 @@ export default class LoomPlugin extends Plugin {
 
   async completeCohere(prompt: string) {
 	const tokens = (await cohere.tokenize({ text: prompt })).body.token_strings;
-	prompt = tokens.slice(-8000).join("");
+	prompt = tokens.slice(-this.settings.contextLength).join("");
 
     const response = await cohere.generate({
       model: this.settings.model,
@@ -1290,7 +1291,7 @@ export default class LoomPlugin extends Plugin {
 	else if (p50kModels.includes(this.settings.model)) tokenizer = p50k;
     else tokenizer = r50k; // i expect that an unknown model will most likely be r50k
 
-	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-8000)); // TODO context length depends on model
+	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-(this.settings.contextLength - this.settings.maxTokens)));
   }
 
   async completeOCP(prompt: string) {

@@ -20,6 +20,7 @@ export interface LoomSettings {
 
   provider: Provider;
   model: string;
+  contextLength: number;
   maxTokens: number;
   temperature: number;
   topP: number;
