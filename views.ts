@@ -322,6 +322,7 @@ export class LoomView extends ItemView {
 	setting("Context length", "contextLength", String(settings.contextLength), "int");
 	setting("Length (in tokens)", "maxTokens", String(settings.maxTokens), "int");
 	setting("Number of completions", "n", String(settings.n), "int");
+    setting("Best of (0 = no beam search)", "bestOf", String(settings.bestOf), "int");
 	setting("Temperature", "temperature", String(settings.temperature), "float");
 	setting("Top p", "topP", String(settings.topP), "float");
 	setting("Frequency penalty", "frequencyPenalty", String(settings.frequencyPenalty), "float");

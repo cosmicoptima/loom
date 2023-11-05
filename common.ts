@@ -26,6 +26,7 @@ export interface LoomSettings {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  bestOf: number;
   n: number;
 
   showSettings: boolean;

@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   topP: 1,
   frequencyPenalty: 0,
   presencePenalty: 0,
+  bestOf: 0,
   n: 5,
 
   showSettings: false,
@@ -1274,7 +1275,8 @@ export default class LoomPlugin extends Plugin {
       body: JSON.stringify({
         prompt,
         max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
+        best_of: this.settings.bestOf,
+		n: this.settings.n,
         temperature: this.settings.temperature,
         top_p: this.settings.topP,
 	    frequency_penalty: this.settings.frequencyPenalty,
