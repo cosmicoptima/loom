@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   topP: 1,
   frequencyPenalty: 0,
   presencePenalty: 0,
+  prepend: "<|endoftext|>",
   bestOf: 0,
   n: 5,
 
@@ -704,6 +705,14 @@ export default class LoomPlugin extends Plugin {
           const linesBefore = this.editor.getValue().split("\n");
           this.editor.setValue(this.fullText(file, id));
 
+      // if the cursor is at the beginning of the editor, move it to the end
+      if(cursor.line === 0 && cursor.ch === 0) {
+        const line = this.editor.lineCount() - 1;
+        const ch = this.editor.getLine(line).length;
+        this.editor.setCursor({ line, ch });
+        return;
+      }
+
 		  // if the text preceding the cursor has changed, move the cursor to the end of the text
 		  // otherwise, restore the cursor position
           const linesAfter = this.editor
@@ -712,10 +721,10 @@ export default class LoomPlugin extends Plugin {
             .slice(0, cursor.line + 1);
           for (let i = 0; i < cursor.line; i++)
             if (linesBefore[i] !== linesAfter[i]) {
-			  const line = this.editor.lineCount() - 1;
-			  const ch = this.editor.getLine(line).length;
-			  this.editor.setCursor({ line, ch });
-              return;
+              const line = this.editor.lineCount() - 1;
+              const ch = this.editor.getLine(line).length;
+              this.editor.setCursor({ line, ch });
+                    return;
             }
 		  this.editor.setCursor(cursor);
         })
@@ -1154,7 +1163,9 @@ export default class LoomPlugin extends Plugin {
 
   async complete(file: TFile) {
 	const state = this.state[file.path];
-	this.breakAtPoint(file);
+	const [parentNode] = this.breakAtPoint(file);
+  // switch to the parent node
+  this.app.workspace.trigger("loom:switch-to", parentNode);
 	await this.generate(file, state.current);
   }
 
@@ -1174,7 +1185,7 @@ export default class LoomPlugin extends Plugin {
 	// show the "Generating..." indicator in the loom view
 	this.renderLoomViews();
 
-    let prompt = `<|endoftext|>${this.fullText(file, rootNode)}`;
+    let prompt = `${this.settings.prepend}${this.fullText(file, rootNode)}`;
 	
     // remove a trailing space if there is one
     // store whether there was, so it can be added back post-completion
