@@ -146,6 +146,12 @@ export class LoomView extends ItemView {
 	this.renderTree(this.tree, state);
 
 	this.containerEl.scrollTop = scroll;
+
+	// scroll to active node in the tree
+	const activeNode = this.tree.querySelector(".is-active");
+	if (activeNode){ //&& !container.contains(activeNode)){
+	  activeNode.scrollIntoView({ block: "nearest" });
+	}
   }
 
   renderNavButtons(settings: LoomSettings) {
@@ -327,6 +333,7 @@ export class LoomView extends ItemView {
 	setting("Top p", "topP", String(settings.topP), "float");
 	setting("Frequency penalty", "frequencyPenalty", String(settings.frequencyPenalty), "float");
 	setting("Presence penalty", "presencePenalty", String(settings.presencePenalty), "float");
+	setting("Prepend sequence", "prepend", settings.prepend, "string");
   }
 
   renderBookmarks(container: HTMLElement, state: NoteState) {
