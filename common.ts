@@ -26,6 +26,7 @@ export interface LoomSettings {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  prepend: string;
   bestOf: number;
   n: number;
 
