@@ -701,32 +701,38 @@ export default class LoomPlugin extends Plugin {
           );
 
 		  // update the editor's text
-          const cursor = this.editor.getCursor();
-          const linesBefore = this.editor.getValue().split("\n");
+          // const cursor = this.editor.getCursor();
+          // const linesBefore = this.editor.getValue().split("\n");
           this.editor.setValue(this.fullText(file, id));
 
-      // if the cursor is at the beginning of the editor, move it to the end
-      if(cursor.line === 0 && cursor.ch === 0) {
+      // always move cursor to the end of the editor
         const line = this.editor.lineCount() - 1;
         const ch = this.editor.getLine(line).length;
         this.editor.setCursor({ line, ch });
-        return;
-      }
+        // return;
 
-		  // if the text preceding the cursor has changed, move the cursor to the end of the text
-		  // otherwise, restore the cursor position
-          const linesAfter = this.editor
-            .getValue()
-            .split("\n")
-            .slice(0, cursor.line + 1);
-          for (let i = 0; i < cursor.line; i++)
-            if (linesBefore[i] !== linesAfter[i]) {
-              const line = this.editor.lineCount() - 1;
-              const ch = this.editor.getLine(line).length;
-              this.editor.setCursor({ line, ch });
-                    return;
-            }
-		  this.editor.setCursor(cursor);
+      // // if the cursor is at the beginning of the editor, move it to the end
+      // if(cursor.line === 0 && cursor.ch === 0) {
+      //   const line = this.editor.lineCount() - 1;
+      //   const ch = this.editor.getLine(line).length;
+      //   this.editor.setCursor({ line, ch });
+      //   return;
+      // }
+
+		  // // if the text preceding the cursor has changed, move the cursor to the end of the text
+		  // // otherwise, restore the cursor position
+      //     const linesAfter = this.editor
+      //       .getValue()
+      //       .split("\n")
+      //       .slice(0, cursor.line + 1);
+      //     for (let i = 0; i < cursor.line; i++)
+      //       if (linesBefore[i] !== linesAfter[i]) {
+      //         const line = this.editor.lineCount() - 1;
+      //         const ch = this.editor.getLine(line).length;
+      //         this.editor.setCursor({ line, ch });
+      //               return;
+      //       }
+		  // this.editor.setCursor(cursor);
         })
       )
     );
