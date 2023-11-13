@@ -85,6 +85,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
 type CompletionResult = { ok: true; completions: string[] } | { ok: false; status: number; message: string };
 
+let renderBusy = false;
+
 export default class LoomPlugin extends Plugin {
   settings: LoomSettings;
   state: Record<string, NoteState>;
@@ -103,8 +105,13 @@ export default class LoomPlugin extends Plugin {
 
   saveAndRender() {
 	this.save();
+  if (renderBusy) return;
+
+  renderBusy = true;
 	this.renderLoomViews();
 	this.renderLoomSiblingsViews();
+  renderBusy = false;
+
   }
 
   thenSaveAndRender(callback: () => void) {
@@ -676,7 +683,10 @@ export default class LoomPlugin extends Plugin {
           );
 
           updateDecorations();
-		  this.saveAndRender();
+
+          setTimeout(() => {
+            this.saveAndRender();
+          }, 0);
 		  
           // restore cursor position
           editor.setCursor(cursor);
