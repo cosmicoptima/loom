@@ -85,8 +85,6 @@ const DEFAULT_SETTINGS: LoomSettings = {
 
 type CompletionResult = { ok: true; completions: string[] } | { ok: false; status: number; message: string };
 
-let renderBusy = false;
-
 export default class LoomPlugin extends Plugin {
   settings: LoomSettings;
   state: Record<string, NoteState>;
@@ -97,6 +95,8 @@ export default class LoomPlugin extends Plugin {
   openai: OpenAIApi;
   azure: AzureOpenAIApi;
 
+  rendering = false;
+
   withFile<T>(callback: (file: TFile) => T): T | null {
     const file = this.app.workspace.getActiveFile();
     if (!file) return null;
@@ -105,12 +105,14 @@ export default class LoomPlugin extends Plugin {
 
   saveAndRender() {
 	this.save();
-  if (renderBusy) return;
 
-  renderBusy = true;
+    if (this.rendering) return;
+    this.rendering = true;
+
 	this.renderLoomViews();
 	this.renderLoomSiblingsViews();
-  renderBusy = false;
+
+    this.rendering = false;
 
   }
 
