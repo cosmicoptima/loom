@@ -125,6 +125,7 @@ export default class LoomPlugin extends Plugin {
 
   initializeProviders() {
     const preset = getPreset(this.settings);
+	if (preset === undefined) return;
 	
 	if (preset.provider === "openai") {
 	  this.openai = new OpenAIApi(new Configuration({
