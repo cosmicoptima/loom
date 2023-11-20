@@ -7,10 +7,12 @@ import {
 } from './views';
 import {
   Provider,
+  ModelPreset,
   LoomSettings,
   SearchResultState,
   Node,
-  NoteState
+  NoteState,
+  getPreset,
 } from './common';
 
 import {
@@ -23,6 +25,7 @@ import {
   Setting,
   TFile,
   requestUrl,
+  setIcon,
 } from "obsidian";
 import { ViewPlugin } from "@codemirror/view";
 
@@ -39,35 +42,18 @@ import { toRoman } from "roman-numerals";
 import { v4 as uuidv4 } from "uuid";
 const untildify = require("untildify") as any;
 
-type LoomSettingStringKey = keyof {
-  [K in keyof LoomSettings as LoomSettings[K] extends string
-    ? K
-    : never]: LoomSettings[K];
-};
 type LoomSettingKey = keyof {
   [K in keyof LoomSettings]: LoomSettings[K];
 };
 
 const DEFAULT_SETTINGS: LoomSettings = {
-  openaiApiKey: "",
-  openaiOrganization: "",
-
-  cohereApiKey: "",
-  textsynthApiKey: "",
-
-  azureApiKey: "",
-  azureEndpoint: "",
-
-  ocpApiKey: "",
-  ocpUrl: "",
-
   passageFolder: "",
   defaultPassageSeparator: "\\n\\n---\\n\\n",
   defaultPassageFrontmatter: "%r:\\n",
 
-  provider: "ocp",
-  model: "code-davinci-002",
-  contextLength: 8000,
+  modelPresets: [],
+  modelPreset: -1,
+
   maxTokens: 60,
   temperature: 1,
   topP: 1,
@@ -138,30 +124,34 @@ export default class LoomPlugin extends Plugin {
   }
 
   initializeProviders() {
-	this.openai = new OpenAIApi(new Configuration({
-	  apiKey: this.settings.openaiApiKey,
-	  organization: this.settings.openaiOrganization,
-	}));
+    const preset = getPreset(this.settings);
+	
+	if (preset.provider === "openai") {
+	  this.openai = new OpenAIApi(new Configuration({
+	    apiKey: preset.apiKey,
+		// @ts-expect-error TODO
+	    organization: preset.organization,
+	  }));
+	} else if (preset.provider == "cohere")
+	  cohere.init(preset.apiKey);
+    else if (preset.provider == "azure") {
+	  // @ts-expect-error TODO
+	  const url = preset.url;
 
-	cohere.init(this.settings.cohereApiKey);
-
-	if (!this.settings.azureApiKey || !this.settings.azureEndpoint) return;
-	this.azure = new AzureOpenAIApi(new AzureConfiguration({
-	  apiKey: this.settings.azureApiKey,
-	  azure: {
-		apiKey: this.settings.azureApiKey,
-		endpoint: this.settings.azureEndpoint,
-	  },
-	}));
+	  if (!preset.apiKey || !url) return;
+	  this.azure = new AzureOpenAIApi(new AzureConfiguration({
+	    apiKey: preset.apiKey,
+	    azure: {
+	  	  apiKey: preset.apiKey,
+	  	  endpoint: url,
+	    },
+	  }));
+	}
   }
 
   apiKeySet() {
-    if (["openai", "openai-chat"].includes(this.settings.provider)) return !!this.settings.openaiApiKey;
-	if (["azure", "azure-chat"].includes(this.settings.provider)) return !!this.settings.azureApiKey;
-	if (this.settings.provider === "cohere") return !!this.settings.cohereApiKey;
-	if (this.settings.provider === "textsynth") return !!this.settings.textsynthApiKey;
-	if (this.settings.provider === "ocp") return !!this.settings.ocpApiKey;
-	throw new Error(`Unknown provider ${this.settings.provider}`);
+	if (this.settings.modelPreset == -1) return false;
+	return this.settings.modelPresets[this.settings.modelPreset].apiKey != "";
   }
 
   newNode(text: string, parentId: string | null, unread: boolean = false): [string, Node] {
@@ -1182,8 +1172,10 @@ export default class LoomPlugin extends Plugin {
   async complete(file: TFile) {
 	const state = this.state[file.path];
 	const [parentNode] = this.breakAtPoint(file);
-  // switch to the parent node
-  this.app.workspace.trigger("loom:switch-to", parentNode);
+    // switch to the parent node
+    this.app.workspace.trigger("loom:switch-to", parentNode);
+	this.saveAndRender();
+
 	await this.generate(file, state.current);
   }
 
@@ -1227,7 +1219,7 @@ export default class LoomPlugin extends Plugin {
 	};
 	let result;
 	try {
-	  result = await completionMethods[this.settings.provider].bind(this)(prompt);
+	  result = await completionMethods[getPreset(this.settings).provider].bind(this)(prompt);
 	} catch (e) {
 	  new Notice(`Error: ${e}`);
 	  return;
@@ -1246,7 +1238,7 @@ export default class LoomPlugin extends Plugin {
 
 	  // if using a chat provider, always separate the prompt and completion with a space
 	  // otherwise, deduplicate adjacent spaces between the prompt and completion
-      if (["azure-chat", "openai-chat"].includes(this.settings.provider)) {
+      if (["azure-chat", "openai-chat"].includes(getPreset(this.settings).provider)) {
         if (!trailingSpace) completion = " " + completion;
       } else if (trailingSpace && completion[0] === " ")
         completion = completion.slice(1);
@@ -1272,10 +1264,10 @@ export default class LoomPlugin extends Plugin {
 
   async completeCohere(prompt: string) {
 	const tokens = (await cohere.tokenize({ text: prompt })).body.token_strings;
-	prompt = tokens.slice(-this.settings.contextLength).join("");
+	prompt = tokens.slice(-getPreset(this.settings).contextLength).join("");
 
     const response = await cohere.generate({
-      model: this.settings.model,
+      model: getPreset(this.settings).model,
       prompt,
       max_tokens: this.settings.maxTokens,
       num_generations: this.settings.n,
@@ -1294,11 +1286,11 @@ export default class LoomPlugin extends Plugin {
 
   async completeTextSynth(prompt: string) {
 	const response = await requestUrl({
-      url: `https://api.textsynth.com/v1/engines/${this.settings.model}/completions`,
+      url: `https://api.textsynth.com/v1/engines/${getPreset(this.settings).model}/completions`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.textsynthApiKey}`,
+        Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
       },
 	  throw: false,
       body: JSON.stringify({
@@ -1329,17 +1321,18 @@ export default class LoomPlugin extends Plugin {
 	// const r50kModels = ["text-davinci-001", "text-curie-001", "text-babbage-001", "text-ada-001", "davinci", "curie", "babbage", "ada"];
 
 	let tokenizer;
-	if (cl100kModels.includes(this.settings.model)) tokenizer = cl100k;
-	else if (p50kModels.includes(this.settings.model)) tokenizer = p50k;
+	if (cl100kModels.includes(getPreset(this.settings).model)) tokenizer = cl100k;
+	else if (p50kModels.includes(getPreset(this.settings).model)) tokenizer = p50k;
     else tokenizer = r50k; // i expect that an unknown model will most likely be r50k
 
-	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-(this.settings.contextLength - this.settings.maxTokens)));
+	return tokenizer.decode(tokenizer.encode(prompt, { disallowedSpecial: new Set() }).slice(-(getPreset(this.settings).contextLength - this.settings.maxTokens)));
   }
 
   async completeOCP(prompt: string) {
 	prompt = this.trimOpenAIPrompt(prompt);
 
-    let url = this.settings.ocpUrl;
+	// @ts-expect-error TODO
+    let url = getPreset(this.settings).url;
 
     if (!(url.startsWith("http://") || url.startsWith("https://")))
       url = "https://" + url;
@@ -1351,7 +1344,7 @@ export default class LoomPlugin extends Plugin {
 	  url,
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.settings.ocpApiKey}`,
+        Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
         "Content-Type": "application/json",
       },
 	  throw: false,
@@ -1377,7 +1370,7 @@ export default class LoomPlugin extends Plugin {
 	let result: CompletionResult;
 	try {
 	  const response = await this.openai.createCompletion({
-        model: this.settings.model,
+        model: getPreset(this.settings).model,
         prompt,
         max_tokens: this.settings.maxTokens,
         n: this.settings.n,
@@ -1398,7 +1391,7 @@ export default class LoomPlugin extends Plugin {
 	let result: CompletionResult;
 	try {
 	  const response = await this.openai.createChatCompletion({
-        model: this.settings.model,
+        model: getPreset(this.settings).model,
         messages: [{ role: "assistant", content: prompt }],
         max_tokens: this.settings.maxTokens,
         n: this.settings.n,
@@ -1419,7 +1412,7 @@ export default class LoomPlugin extends Plugin {
 	let result: CompletionResult;
 	try {
 	  const response = await this.azure.createCompletion({
-        model: this.settings.model,
+        model: getPreset(this.settings).model,
         prompt,
         max_tokens: this.settings.maxTokens,
         n: this.settings.n,
@@ -1440,7 +1433,7 @@ export default class LoomPlugin extends Plugin {
 	let result: CompletionResult;
 	try {
 	  const response = await this.azure.createChatCompletion({
-        model: this.settings.model,
+        model: getPreset(this.settings).model,
         messages: [{ role: "assistant", content: prompt }],
         max_tokens: this.settings.maxTokens,
         n: this.settings.n,
@@ -1504,20 +1497,240 @@ class LoomSettingTab extends PluginSettingTab {
     method2.createEl("kbd", { text: "Loom: Open Loom pane" });
     method2.createEl("span", { text: " command." });
 
-    const apiKeySetting = (name: string, key: LoomSettingStringKey) => {
-      new Setting(containerEl)
-        .setName(`${name} API key`)
-        .setDesc(`Required if using ${name}`)
-        .addText((text) =>
-          text
-            .setValue(this.plugin.settings[key])
-            .onChange(async (value) => {
-              this.plugin.settings[key] = value;
-              await this.plugin.save();
-            })
-        );
-    };
+	const presetHeader = containerEl.createDiv({ cls: "setting-item setting-item-heading" });
+	presetHeader.createDiv({ cls: "setting-item-name", text: "Presets" });
+
+	const presetEditor = containerEl.createDiv({ cls: "loom__preset-editor setting-item" });
 	
+	const presetList = presetEditor.createDiv({ cls: "loom__preset-list" });
+
+	const selectPreset = (index: number) => {
+	  this.plugin.settings.modelPreset = index;
+	  this.plugin.save();
+	  updatePresetFields();
+	  updatePresetList();
+	};
+
+    const deletePreset = (index: number) => {
+	  this.plugin.settings.modelPresets.splice(index, 1);
+	  this.plugin.save();
+
+	  if (index === this.plugin.settings.modelPreset) {
+	    if (this.plugin.settings.modelPresets.length === 0) selectPreset(-1);
+		else if (index === this.plugin.settings.modelPresets.length) selectPreset(index - 1);
+		else selectPreset(index);
+	  }
+	};
+
+    const createPreset = (preset: ModelPreset<Provider>) => {
+      this.plugin.settings.modelPresets.push(preset);
+	  this.plugin.save();
+	  selectPreset(this.plugin.settings.modelPresets.length - 1);
+	}
+
+	const newPresetButtons = presetEditor.createDiv();
+
+	const newPresetButton = newPresetButtons.createEl("button", {
+	  cls: "loom__new-preset-button",
+	  text: "New preset",
+	});
+	newPresetButton.addEventListener("click", () => {
+		const newPreset: ModelPreset<"openai"> = {
+		  name: "New preset",
+		  provider: "openai",
+		  model: "davinci-002",
+		  contextLength: 16384,
+		  apiKey: "",
+		  organization: "",
+		};
+		createPreset(newPreset);
+	  },
+	);
+
+	const restoreApiKeyDropdown = newPresetButtons.createEl("select", { cls: "loom__new-preset-button dropdown" });
+	restoreApiKeyDropdown.createEl("option", {
+	  text: "Restore API key from pre-1.19...",
+	  attr: { value: "none", selected: true },
+	});
+
+	restoreApiKeyDropdown.createEl("option", { text: "OpenAI", attr: { value: "openai" } });
+	restoreApiKeyDropdown.createEl("option", { text: "OpenAI code-davinci-002 Proxy", attr: { value: "ocp" } });
+	restoreApiKeyDropdown.createEl("option", { text: "Cohere", attr: { value: "cohere" } });
+	restoreApiKeyDropdown.createEl("option", { text: "TextSynth", attr: { value: "textsynth" } });
+	restoreApiKeyDropdown.createEl("option", { text: "Azure", attr: { value: "azure" } });
+
+	restoreApiKeyDropdown.addEventListener("change", (event) => {
+	  const provider = (event.target as HTMLSelectElement).value as Provider;
+	  let preset = { name: "New preset", provider, model: "", contextLength: "" };
+	  switch (provider) {
+		case "openai": {
+		  preset = {
+			...preset,
+		    // @ts-expect-error
+			apiKey: this.plugin.settings.openaiApiKey || "",
+		    // @ts-expect-error
+			organization: this.plugin.settings.openaiOrganization || "",
+		  };
+		  break;
+		}
+		case "ocp": {
+		  preset = {
+			...preset,
+			// @ts-expect-error
+			apiKey: this.plugin.settings.ocpApiKey || "",
+			// @ts-expect-error
+			url: this.plugin.settings.ocpUrl || "",
+		  };
+		  break;
+		}
+		case "cohere": {
+		  preset = {
+			...preset,
+			// @ts-expect-error
+			apiKey: this.plugin.settings.cohereApiKey || "",
+		  };
+		  break;
+		}
+		case "textsynth": {
+		  preset = {
+			...preset,
+			// @ts-expect-error
+			apiKey: this.plugin.settings.textsynthApiKey || "",
+		  };
+		  break;
+		}
+		case "azure": {
+		  preset = {
+			...preset,
+			// @ts-expect-error
+			apiKey: this.plugin.settings.azureApiKey || "",
+			// @ts-expect-error
+			endpoint: this.plugin.settings.azureEndpoint || "",
+		  };
+		  break;
+		}
+		default: {
+		  throw new Error(`Unknown provider: ${provider}`);
+		}
+	  }
+	  // @ts-expect-error TODO
+      createPreset(preset);
+
+	  restoreApiKeyDropdown.value = "none";
+	});
+
+	// edit preset fields
+
+    const presetFields = containerEl.createDiv();
+
+    const updatePresetFields = () => {
+	  presetFields.empty();
+
+	  new Setting(presetFields).setName("Name").addText((text) =>
+	    text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].name).onChange((value) => {
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].name = value;
+	  	  this.plugin.saveAndRender();
+	  	  updatePresetList();
+	    }),
+	  );
+
+	  new Setting(presetFields).setName("Provider").addDropdown((dropdown) => {
+	    const options: Record<string, string> = {
+	  	  cohere: "Cohere",
+	  	  textsynth: "TextSynth",
+	  	  ocp: "OpenAI code-davinci-002 Proxy",
+	  	  openai: "OpenAI",
+	  	  "openai-chat": "OpenAI (Chat)",
+	  	  azure: "Azure",
+	  	  "azure-chat": "Azure (Chat)",
+	    };
+	    dropdown.addOptions(options);
+	    dropdown.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider);
+	    dropdown.onChange(async (value) => {
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = value;
+	  	  await this.plugin.save();
+		  updatePresetFields();
+	    });
+	  });
+
+	  new Setting(presetFields).setName("Model").addText((text) =>
+	    text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model).onChange(async (value) => {
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = value;
+	  	  await this.plugin.save();
+	    }),
+	  );
+
+	  new Setting(presetFields).setName("Context length").addText((text) =>
+	    text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength.toString()).onChange(async (value) => {
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = parseInt(value);
+	  	  await this.plugin.save();
+	    }),
+	  );
+
+	  new Setting(presetFields).setName("API key").addText((text) =>
+	    text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].apiKey).onChange(async (value) => {
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].apiKey = value;
+	  	  await this.plugin.save();
+	    }),
+	  );
+
+	  if (["openai", "openai-chat"].includes(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider)) {
+	    new Setting(presetFields).setName("Organization").addText((text) =>
+		  // @ts-expect-error TODO
+	      text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].organization).onChange(async (value) => {
+		    // @ts-expect-error TODO
+	  	    this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].organization = value;
+	  	    await this.plugin.save();
+	      }),
+	    );
+	  }
+
+	  if (["ocp", "azure", "azure-chat"].includes(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider)) {
+	    new Setting(presetFields).setName("URL").addText((text) =>
+	      // @ts-expect-error TODO
+	  	text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].url).onChange(async (value) => {
+	  	  // @ts-expect-error TODO
+	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].url = value;
+	  	  await this.plugin.save();
+	  	}),
+	    );
+	  }
+	}
+
+    const updatePresetList = () => {
+	  presetList.empty();
+	  for (const i in this.plugin.settings.modelPresets) {
+		const preset = this.plugin.settings.modelPresets[i];
+		const isActive = this.plugin.settings.modelPreset === parseInt(i);
+
+	    const presetContainer = presetList.createDiv(
+		  { cls: `loom__preset is-clickable outgoing-link-item tree-item-self${isActive ? " is-active" : ""}` }
+	    );
+		presetContainer.addEventListener("click", () => selectPreset(parseInt(i)));
+
+	    presetContainer.createSpan({ cls: "loom__preset-name tree-item-inner", text: preset.name });
+
+		const deletePresetOuter = presetContainer.createDiv({ cls: "loom__preset-buttons" });
+		const deletePresetInner = deletePresetOuter.createDiv({
+		  cls: "loom__preset-button",
+		  attr: { "aria-label": "Delete" },
+		});
+		setIcon(deletePresetInner, "trash-2");
+		deletePresetInner.addEventListener("click", (event) => {
+          event.stopPropagation();
+		  deletePreset(parseInt(i))
+		});
+	  }
+	};
+
+	updatePresetFields();
+	updatePresetList();
+
+    // TODO simplify below?
+
+	const passagesHeader = containerEl.createDiv({ cls: "setting-item setting-item-heading" });
+	passagesHeader.createDiv({ cls: "setting-item-name", text: "Passages" });
+
     const setting = (
 	  name: string,
 	  key: LoomSettingKey,
@@ -1535,25 +1748,6 @@ class LoomSettingTab extends PluginSettingTab {
 
 	const idSetting = (name: string, key: LoomSettingKey) =>
 	  setting(name, key, (value) => value, (text) => text);
-
-    apiKeySetting("Cohere", "cohereApiKey");
-    apiKeySetting("TextSynth", "textsynthApiKey");
-    apiKeySetting("OpenAI code-davinci-002 proxy", "ocpApiKey");
-
-    new Setting(containerEl)
-      .setName("OpenAI code-davinci-002 proxy URL")
-      .setDesc("Required if using OCP")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.ocpUrl).onChange(async (value) => {
-          this.plugin.settings.ocpUrl = value;
-          await this.plugin.save();
-        })
-      );
-
-    apiKeySetting("OpenAI", "openaiApiKey");
-	idSetting("OpenAI organization ID", "openaiOrganization");
-    apiKeySetting("Azure", "azureApiKey")
-	idSetting("Azure resource endpoint", "azureEndpoint");
 
     new Setting(containerEl)
       .setName("Passage folder location")

@@ -268,34 +268,23 @@ export class LoomView extends ItemView {
 
   renderSettings(container: HTMLElement, settings: LoomSettings) {
     const settingsContainer = container.createDiv({ cls: "loom__settings" });
-
-	// provider dropdown
 	
-	const providerContainer = settingsContainer.createDiv({ cls: "loom__setting" });
-	providerContainer.createEl("label", { text: "Provider" });
-	const providerDropdown = providerContainer.createEl("select");
+    // preset dropdown
 
-	const providers = [
-	  { label: "OpenAI code-davinci-002 proxy", value: "ocp" },
-	  { label: "Cohere", value: "cohere" },
-	  { label: "TextSynth", value: "textsynth" },
-	  { label: "OpenAI", value: "openai" },
-	  { label: "OpenAI (Chat)", value: "openai-chat" },
-	  { label: "Azure", value: "azure" },
-	  { label: "Azure (Chat)", value: "azure-chat" },
-	];
-	providers.forEach((provider) =>
-	  providerDropdown.createEl("option", {
-        text: provider.label,
-		attr: {
-		  value: provider.value,
-		  selected: provider.value === settings.provider ? "selected" : null,
-		},
-	  })
-	);
+	const presetContainer = settingsContainer.createDiv({ cls: "loom__setting" });
+	presetContainer.createEl("label", { text: "Model preset" });
+	const presetDropdown = presetContainer.createEl("select");
 
-	providerDropdown.addEventListener("change", () =>
-	  this.app.workspace.trigger("loom:set-setting", "provider", providerDropdown.value)
+	for (const i in settings.modelPresets) {
+	  const preset = settings.modelPresets[i];
+	  presetDropdown.createEl("option", {
+		text: preset.name,
+		attr: { selected: settings.modelPreset === parseInt(i), value: i },
+	  });
+	}
+
+	presetDropdown.addEventListener("change", () =>
+	  this.app.workspace.trigger("loom:set-setting", "provider", presetDropdown.value)
 	);
 
 	// other settings
@@ -324,8 +313,6 @@ export class LoomView extends ItemView {
 	  );
 	}
 
-	setting("Model", "model", settings.model, "string");
-	setting("Context length", "contextLength", String(settings.contextLength), "int");
 	setting("Length (in tokens)", "maxTokens", String(settings.maxTokens), "int");
 	setting("Number of completions", "n", String(settings.n), "int");
     setting("Best of (0 = no beam search)", "bestOf", String(settings.bestOf), "int");

@@ -331,6 +331,56 @@ body {
   padding: 0.35em 0 0.35em 0.6em;
 }
 
+/* settings -> loom */
+
+.loom__preset-editor {
+  align-items: start;
+  flex-direction: column;
+}
+
+.loom__preset-list {
+  width: 100%;
+  margin: -0.125em 0 0.75em;
+}
+
+.loom__preset {
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+.loom__preset.is-active {
+  background-color: var(--nav-item-background-active);
+}
+
+.loom__preset-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.35em 0 0.35em 0.6em;
+  flex-grow: 1;
+}
+
+.loom__preset-buttons {
+  display: flex;
+  align-items: center;
+  padding-right: 0.5em;
+}
+
+.loom__preset-button {
+  display: inline-flex !important;
+  margin-left: -0.025em;
+  padding: 0.1em 0.075em;
+  border-radius: 0.25em;
+  --icon-size: 1.1rem;
+}
+.loom__preset-button:hover {
+  background-color: var(--nav-item-background-active);
+}
+
+.loom__new-preset-button {
+  margin-right: 0.5em;
+}
+
 /* hidden -- must be at end */
 
 .hidden {
