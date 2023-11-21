@@ -275,17 +275,21 @@ export class LoomView extends ItemView {
 	presetContainer.createEl("label", { text: "Model preset" });
 	const presetDropdown = presetContainer.createEl("select");
 
-	for (const i in settings.modelPresets) {
-	  const preset = settings.modelPresets[i];
-	  presetDropdown.createEl("option", {
-		text: preset.name,
-		attr: { selected: settings.modelPreset === parseInt(i), value: i },
-	  });
-	}
+    if (settings.modelPresets.length === 0)
+	  presetDropdown.createEl("option").createEl("i", { text: "[You have no presets. Go to Settings → Loom.]" });
+    else {
+	  for (const i in settings.modelPresets) {
+	    const preset = settings.modelPresets[i];
+	    presetDropdown.createEl("option", {
+	  	  text: preset.name,
+	  	  attr: { selected: settings.modelPreset === parseInt(i), value: i },
+	    });
+	  }
 
-	presetDropdown.addEventListener("change", () =>
-	  this.app.workspace.trigger("loom:set-setting", "provider", presetDropdown.value)
-	);
+	  presetDropdown.addEventListener("change", () =>
+	    this.app.workspace.trigger("loom:set-setting", "modelPreset", presetDropdown.value)
+	  );
+	}
 
 	// other settings
 	
