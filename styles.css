@@ -377,8 +377,9 @@ body {
   background-color: var(--nav-item-background-active);
 }
 
-.loom__new-preset-button {
-  margin-right: 0.5em;
+.loom__new-preset-buttons {
+  display: flex;
+  gap: var(--size-4-2);
 }
 
 .loom__no-preset-selected {

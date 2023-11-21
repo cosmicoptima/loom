@@ -1529,12 +1529,9 @@ class LoomSettingTab extends PluginSettingTab {
 	  selectPreset(this.plugin.settings.modelPresets.length - 1);
 	}
 
-	const newPresetButtons = presetEditor.createDiv();
+	const newPresetButtons = presetEditor.createDiv({ cls: "loom__new-preset-buttons" });
 
-	const newPresetButton = newPresetButtons.createEl("button", {
-	  cls: "loom__new-preset-button",
-	  text: "New preset",
-	});
+	const newPresetButton = newPresetButtons.createEl("button", { text: "New preset" });
 	newPresetButton.addEventListener("click", () => {
 		const newPreset: ModelPreset<"openai"> = {
 		  name: "New preset",
