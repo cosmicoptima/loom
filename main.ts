@@ -1627,6 +1627,11 @@ class LoomSettingTab extends PluginSettingTab {
     const updatePresetFields = () => {
 	  presetFields.empty();
 
+	  if (this.plugin.settings.modelPreset === -1) {
+		presetFields.createEl("p", { cls: "loom__no-preset-selected", text: "No preset selected." });
+		return;
+	  }
+
 	  new Setting(presetFields).setName("Name").addText((text) =>
 	    text.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].name).onChange((value) => {
 	  	  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].name = value;

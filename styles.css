@@ -381,6 +381,11 @@ body {
   margin-right: 0.5em;
 }
 
+.loom__no-preset-selected {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
 /* hidden -- must be at end */
 
 .hidden {
