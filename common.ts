@@ -27,6 +27,7 @@ export interface LoomSettings {
   modelPresets: ModelPreset<Provider>[];
   modelPreset: number;
 
+  visibility: Record<string, boolean>;
   maxTokens: number;
   temperature: number;
   topP: number;

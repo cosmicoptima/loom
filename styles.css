@@ -82,6 +82,26 @@ body {
   margin-bottom: 0.3em;
 }
 
+.loom__visibility {
+  margin-bottom: 0.7em;
+}
+
+.loom__visibility-item {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.7em;
+}
+
+.loom__visibility-item-label {
+  font-size: var(--font-ui-small);
+}
+
+.loom__no-metavisibility {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+  margin: 0 0 0.5em 0.5em;
+}
+
 .loom__setting {
   display: flex;
   flex-direction: column;

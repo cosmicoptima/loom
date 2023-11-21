@@ -54,6 +54,18 @@ const DEFAULT_SETTINGS: LoomSettings = {
   modelPresets: [],
   modelPreset: -1,
 
+  visibility: {
+    "visibility": true,
+	"modelPreset": true,
+	"maxTokens": true,
+	"n": true,
+	"bestOf": false,
+	"temperature": true,
+	"topP": false,
+	"frequencyPenalty": false,
+	"presencePenalty": false,
+	"prepend": false,
+  },
   maxTokens: 60,
   temperature: 1,
   topP: 1,
@@ -978,6 +990,17 @@ export default class LoomPlugin extends Plugin {
         }
       )
     );
+
+    this.registerEvent(
+      this.app.workspace.on(
+        // @ts-expect-error
+        "loom:set-visibility-setting",
+        (setting: string, value: boolean) => {
+		  this.settings.visibility[setting] = value;
+		  this.saveAndRender();
+		}
+	  )
+	);
 
 	this.registerEvent(
 	  // @ts-expect-error

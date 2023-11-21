@@ -269,26 +269,69 @@ export class LoomView extends ItemView {
   renderSettings(container: HTMLElement, settings: LoomSettings) {
     const settingsContainer = container.createDiv({ cls: "loom__settings" });
 	
+    // visibility checkboxes
+	
+	const visibilityContainer = settingsContainer.createDiv({ cls: "loom__visibility" });
+
+    const createCheckbox = (id: string, label: string, ellipsis: boolean = false) => {
+	  const checkboxContainer = visibilityContainer.createSpan({ cls: "loom__visibility-item" });
+	  const checkbox = checkboxContainer.createEl("input", {
+		attr: {
+		  id: `loom__${id}-checkbox`,
+		  checked: settings.visibility[id] ? "checked" : null
+		},
+		type: "checkbox",
+	  });
+      checkbox.addEventListener("change", () =>
+		this.app.workspace.trigger("loom:set-visibility-setting", id, checkbox.checked)
+	  );
+
+	  const checkboxLabel = checkboxContainer.createEl("label", {
+		attr: { for: `loom__${id}-checkbox` },
+		cls: "loom__visibility-item-label",
+		text: label,
+	  });
+	  if (ellipsis && !settings.visibility.visibility) checkboxLabel.createSpan({
+		cls: "loom__no-metavisibility",
+		text: "...",
+	  });
+	};
+
+	createCheckbox("visibility", "These checkboxes", true);
+	if (settings.visibility["visibility"]) {
+	  createCheckbox("modelPreset", "Model preset");
+	  createCheckbox("maxTokens", "Length");
+	  createCheckbox("n", "Number of completions");
+	  createCheckbox("bestOf", "Best of");
+	  createCheckbox("temperature", "Temperature");
+	  createCheckbox("topP", "Top p");
+	  createCheckbox("frequencyPenalty", "Frequency penalty");
+	  createCheckbox("presencePenalty", "Presence penalty");
+	  createCheckbox("prepend", "Prepend sequence");
+	}
+	
     // preset dropdown
 
-	const presetContainer = settingsContainer.createDiv({ cls: "loom__setting" });
-	presetContainer.createEl("label", { text: "Model preset" });
-	const presetDropdown = presetContainer.createEl("select");
+	if (settings.visibility["modelPreset"]) {
+	  const presetContainer = settingsContainer.createDiv({ cls: "loom__setting" });
+	  presetContainer.createEl("label", { text: "Model preset" });
+	  const presetDropdown = presetContainer.createEl("select");
 
-    if (settings.modelPresets.length === 0)
-	  presetDropdown.createEl("option").createEl("i", { text: "[You have no presets. Go to Settings → Loom.]" });
-    else {
-	  for (const i in settings.modelPresets) {
-	    const preset = settings.modelPresets[i];
-	    presetDropdown.createEl("option", {
-	  	  text: preset.name,
-	  	  attr: { selected: settings.modelPreset === parseInt(i), value: i },
-	    });
+      if (settings.modelPresets.length === 0)
+	    presetDropdown.createEl("option").createEl("i", { text: "[You have no presets. Go to Settings → Loom.]" });
+      else {
+	    for (const i in settings.modelPresets) {
+	      const preset = settings.modelPresets[i];
+	      presetDropdown.createEl("option", {
+	    	  text: preset.name,
+	    	  attr: { selected: settings.modelPreset === parseInt(i), value: i },
+	      });
+	    }
+
+	    presetDropdown.addEventListener("change", () =>
+	      this.app.workspace.trigger("loom:set-setting", "modelPreset", presetDropdown.value)
+	    );
 	  }
-
-	  presetDropdown.addEventListener("change", () =>
-	    this.app.workspace.trigger("loom:set-setting", "modelPreset", presetDropdown.value)
-	  );
 	}
 
 	// other settings
@@ -299,6 +342,8 @@ export class LoomView extends ItemView {
 	  value: string,
 	  type: "string" | "int" | "float"
 	) => {
+	  if (!settings.visibility[setting]) return;
+
       const parsers = {
 	    "string": (value: string) => value,
 		"int": (value: string) => parseInt(value),
