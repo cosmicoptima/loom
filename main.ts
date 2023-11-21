@@ -1545,10 +1545,55 @@ class LoomSettingTab extends PluginSettingTab {
 	  },
 	);
 
+	const fillInModelDropdown = newPresetButtons.createEl("select", { cls: "loom__new-preset-button dropdown" });
+	fillInModelDropdown.createEl("option", {
+	  text: "Fill in model details...",
+	  attr: { value: "none", selected: true, disabled: true },
+	});
+
+	fillInModelDropdown.createEl("option", { text: "davinci-002", attr: { value: "davinci-002" } });
+	fillInModelDropdown.createEl("option", { text: "code-davinci-002", attr: { value: "code-davinci-002" } });
+	fillInModelDropdown.createEl("option", { text: "code-davinci-002 (Proxy)", attr: { value: "code-davinci-002-proxy" } });
+	fillInModelDropdown.createEl("option", { text: "gpt-4-base", attr: { value: "gpt-4-base" } });
+
+	fillInModelDropdown.addEventListener("change", (event) => {
+	  const value = (event.target as HTMLSelectElement).value;
+	  switch (value) {
+		case "davinci-002": {
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = "openai";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = "davinci-002";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 16384;
+		  break;
+		}
+		case "code-davinci-002": {
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = "openai";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = "code-davinci-002";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 8001;
+		  break;
+		}
+		case "code-davinci-002-proxy": {
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = "ocp";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = "code-davinci-002";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 8001;
+		  break;
+		}
+		case "gpt-4-base": {
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = "openai";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = "gpt-4-base";
+		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 8192;
+		  break;
+		}
+	  }
+	  this.plugin.save();
+	  updatePresetFields();
+
+	  fillInModelDropdown.value = "none";
+	});
+
 	const restoreApiKeyDropdown = newPresetButtons.createEl("select", { cls: "loom__new-preset-button dropdown" });
 	restoreApiKeyDropdown.createEl("option", {
 	  text: "Restore API key from pre-1.19...",
-	  attr: { value: "none", selected: true },
+	  attr: { value: "none", selected: true, disabled: true },
 	});
 
 	restoreApiKeyDropdown.createEl("option", { text: "OpenAI", attr: { value: "openai" } });
