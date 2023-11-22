@@ -340,13 +340,14 @@ export class LoomView extends ItemView {
 	  label: string,
 	  setting: string,
 	  value: string,
-	  type: "string" | "int" | "float"
+	  type: "string" | "int" | "int?" | "float"
 	) => {
 	  if (!settings.visibility[setting]) return;
 
       const parsers = {
 	    "string": (value: string) => value,
 		"int": (value: string) => parseInt(value),
+		"int?": (value: string) => value === "" ? 0 : parseInt(value),
 		"float": (value: string) => parseFloat(value),
 	  };
 
@@ -364,7 +365,7 @@ export class LoomView extends ItemView {
 
 	setting("Length (in tokens)", "maxTokens", String(settings.maxTokens), "int");
 	setting("Number of completions", "n", String(settings.n), "int");
-    setting("Best of (0 = no beam search)", "bestOf", String(settings.bestOf), "int");
+    setting("Best of", "bestOf", settings.bestOf === 0 ? "" : String(settings.bestOf), "int?");
 	setting("Temperature", "temperature", String(settings.temperature), "float");
 	setting("Top p", "topP", String(settings.topP), "float");
 	setting("Frequency penalty", "frequencyPenalty", String(settings.frequencyPenalty), "float");
