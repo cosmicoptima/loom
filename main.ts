@@ -1571,7 +1571,7 @@ class LoomSettingTab extends PluginSettingTab {
 	const fillInModelDropdown = newPresetButtons.createEl("select", { cls: "loom__new-preset-button dropdown" });
 	fillInModelDropdown.createEl("option", {
 	  text: "Fill in model details...",
-	  attr: { value: "none", selected: true, disabled: true },
+	  attr: { value: "none", selected: "", disabled: "" },
 	});
 
 	fillInModelDropdown.createEl("option", { text: "davinci-002", attr: { value: "davinci-002" } });
@@ -1616,7 +1616,7 @@ class LoomSettingTab extends PluginSettingTab {
 	const restoreApiKeyDropdown = newPresetButtons.createEl("select", { cls: "loom__new-preset-button dropdown" });
 	restoreApiKeyDropdown.createEl("option", {
 	  text: "Restore API key from pre-1.19...",
-	  attr: { value: "none", selected: true, disabled: true },
+	  attr: { value: "none", selected: "", disabled: "" },
 	});
 
 	restoreApiKeyDropdown.createEl("option", { text: "OpenAI", attr: { value: "openai" } });

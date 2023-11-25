@@ -324,7 +324,7 @@ export class LoomView extends ItemView {
 	      const preset = settings.modelPresets[i];
 	      presetDropdown.createEl("option", {
 	    	  text: preset.name,
-	    	  attr: { selected: settings.modelPreset === parseInt(i) ? "selected" : null, value: i },
+	    	  attr: { selected: settings.modelPreset === parseInt(i) ? "" : null, value: i },
 	      });
 	    }
 
