@@ -15,6 +15,10 @@ import {
   getPreset,
 } from './common';
 
+// import {
+//   claudeCompletion,
+// } from './claude';
+
 import {
   App,
   Editor,
@@ -32,6 +36,8 @@ import { ViewPlugin } from "@codemirror/view";
 import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAIApi} from "azure-openai";
 import { Configuration, OpenAIApi } from "openai";
 import * as cohere from "cohere-ai";
+import Anthropic from '@anthropic-ai/sdk';
+
 
 import cl100k from "gpt-tokenizer";
 import p50k from "gpt-tokenizer/esm/model/text-davinci-003";
@@ -92,6 +98,8 @@ export default class LoomPlugin extends Plugin {
 
   openai: OpenAIApi;
   azure: AzureOpenAIApi;
+  anthropic: Anthropic;
+  anthropicApiKey: string;
 
   rendering = false;
 
@@ -137,29 +145,47 @@ export default class LoomPlugin extends Plugin {
 
   initializeProviders() {
     const preset = getPreset(this.settings);
-	if (preset === undefined) return;
-	
-	if (preset.provider === "openai") {
-	  this.openai = new OpenAIApi(new Configuration({
-	    apiKey: preset.apiKey,
-		// @ts-expect-error TODO
-	    organization: preset.organization,
-	  }));
-	} else if (preset.provider == "cohere")
-	  cohere.init(preset.apiKey);
-    else if (preset.provider == "azure") {
-	  // @ts-expect-error TODO
-	  const url = preset.url;
+    if (preset === undefined) return;
+    
+    if (preset.provider === "openai") {
+      this.openai = new OpenAIApi(new Configuration({
+        apiKey: preset.apiKey,
+      // @ts-expect-error TODO
+        organization: preset.organization,
+      }));
+    } else if (preset.provider == "cohere")
+      cohere.init(preset.apiKey);
+      else if (preset.provider == "azure") {
+      // @ts-expect-error TODO
+      const url = preset.url;
 
-	  if (!preset.apiKey || !url) return;
-	  this.azure = new AzureOpenAIApi(new AzureConfiguration({
-	    apiKey: preset.apiKey,
-	    azure: {
-	  	  apiKey: preset.apiKey,
-	  	  endpoint: url,
-	    },
-	  }));
-	}
+      if (!preset.apiKey || !url) return;
+      this.azure = new AzureOpenAIApi(new AzureConfiguration({
+        apiKey: preset.apiKey,
+        azure: {
+          apiKey: preset.apiKey,
+          endpoint: url,
+        },
+      }));
+    } else if (preset.provider == "anthropic") {
+      //(property) ClientOptions.fetch?: Fetch | undefined
+      //Specify a custom fetch function implementation.
+      //If not provided, we use node-fetch on Node.js and otherwise expect that fetch is defined globally.
+      // expects Promise<Response> as return value
+      this.anthropicApiKey = preset.apiKey;
+      this.anthropic = new Anthropic({
+        apiKey: preset.apiKey,
+        // fetch: 
+        defaultHeaders: {
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'messages-2023-12-15',
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "*",
+          "Access-Control-Allow-Methods": "*",
+          "Access-Control-Allow-Credentials": "true",
+        },
+      });
+    }
   }
 
   apiKeySet() {
@@ -309,6 +335,17 @@ export default class LoomPlugin extends Plugin {
 	  checkCallback: (checking: boolean) => completeCallback(checking, this.generateSiblings.bind(this)),
 	  hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: " " }],
 	});
+
+  this.addCommand({
+    id: "bookmark",
+    name: "Bookmark current node",
+    checkCallback: (checking: boolean) =>
+      withState(checking, (state) => {
+        this.app.workspace.trigger("loom:toggle-bookmark", state.current);
+      }),
+    hotkeys: [{ modifiers: ["Ctrl"], key: "b" }],
+  });
+
 
     const withState = (checking: boolean, callback: (state: NoteState) => void) => {
       const file = this.app.workspace.getActiveFile();
@@ -1232,6 +1269,9 @@ export default class LoomPlugin extends Plugin {
 
 	// the tokenization and completion depend on the provider,
 	// so call a different method depending on the provider
+
+  console.log("prompt", prompt);
+
 	const completionMethods: Record<Provider, (prompt: string) => Promise<CompletionResult>> = {
 	  cohere: this.completeCohere,
 	  textsynth: this.completeTextSynth,
@@ -1240,6 +1280,7 @@ export default class LoomPlugin extends Plugin {
 	  "openai-chat": this.completeOpenAIChat,
 	  azure: this.completeAzure,
 	  "azure-chat": this.completeAzureChat,
+    anthropic: this.completeAnthropic,
 	};
 	let result;
 	try {
@@ -1253,6 +1294,8 @@ export default class LoomPlugin extends Plugin {
 	  return;
 	}
 	const rawCompletions = result.completions;
+
+  console.log("rawCompletions", rawCompletions);
 
 	// escape and clean up the completions
 	const completions = rawCompletions.map((completion: string) => {
@@ -1473,6 +1516,48 @@ export default class LoomPlugin extends Plugin {
 	return result;
   }
 
+  async completeAnthropic(prompt: string) {
+    prompt = this.trimOpenAIPrompt(prompt);
+    // let result: CompletionResult;
+
+
+    try {
+      // console.log("prompt", prompt);
+      const response = await requestUrl({
+        url: "https://api.anthropic.com/v1/messages",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          'x-api-key': this.anthropicApiKey,
+        },
+        body: JSON.stringify({
+          model: getPreset(this.settings).model,
+          max_tokens: this.settings.maxTokens,
+          temperature: this.settings.temperature,
+          system: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with the output of the command.",
+          messages: [
+            {"role": "user", "content": `<cmd>cat untitled.txt</cmd>`},
+            {"role": "assistant", "content": `${prompt}`}
+          ],
+        }),
+      });
+
+      
+      const result: CompletionResult = response.status === 200
+        ? { ok: true, completions: [response.json.content[0]?.text || "<no text>"] }
+        : { ok: false, status: response.status, message: "" };
+
+      // console.log("response", result);
+
+      return result;
+    } catch (e) {
+      console.error(e)
+      const result: CompletionResult = { ok: false, status: 400, message: "an error was encountered" };
+      return result;
+    }
+  }
+
   async loadSettings() {
     const settings = (await this.loadData())?.settings || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
@@ -1578,6 +1663,7 @@ class LoomSettingTab extends PluginSettingTab {
 	fillInModelDropdown.createEl("option", { text: "code-davinci-002", attr: { value: "code-davinci-002" } });
 	fillInModelDropdown.createEl("option", { text: "code-davinci-002 (Proxy)", attr: { value: "code-davinci-002-proxy" } });
 	fillInModelDropdown.createEl("option", { text: "gpt-4-base", attr: { value: "gpt-4-base" } });
+  fillInModelDropdown.createEl("option", { text: "claude-3-opus", attr: { value: "claude-3-opus" } });
 
 	fillInModelDropdown.addEventListener("change", (event) => {
 	  const value = (event.target as HTMLSelectElement).value;
@@ -1606,6 +1692,12 @@ class LoomSettingTab extends PluginSettingTab {
 		  this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 8192;
 		  break;
 		}
+    case "claude-3-opus": {
+      this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider = "anthropic";
+      this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].model = "claude-3-opus-20240229";
+      this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].contextLength = 20000;
+      break;
+    }
 	  }
 	  this.plugin.save();
 	  updatePresetFields();
@@ -1624,6 +1716,7 @@ class LoomSettingTab extends PluginSettingTab {
 	restoreApiKeyDropdown.createEl("option", { text: "Cohere", attr: { value: "cohere" } });
 	restoreApiKeyDropdown.createEl("option", { text: "TextSynth", attr: { value: "textsynth" } });
 	restoreApiKeyDropdown.createEl("option", { text: "Azure", attr: { value: "azure" } });
+  restoreApiKeyDropdown.createEl("option", { text: "Anthropic", attr: { value: "anthropic" } });
 
 	restoreApiKeyDropdown.addEventListener("change", (event) => {
 	  const provider = (event.target as HTMLSelectElement).value as Provider;
@@ -1675,6 +1768,14 @@ class LoomSettingTab extends PluginSettingTab {
 		  };
 		  break;
 		}
+    case "anthropic": {
+      preset = {
+        ...preset,
+        // @ts-expect-error
+        apiKey: this.plugin.settings.anthropicApiKey || "",
+      };
+      break;
+    }
 		default: {
 		  throw new Error(`Unknown provider: ${provider}`);
 		}
@@ -1714,6 +1815,7 @@ class LoomSettingTab extends PluginSettingTab {
 	  	  "openai-chat": "OpenAI (Chat)",
 	  	  azure: "Azure",
 	  	  "azure-chat": "Azure (Chat)",
+        anthropic: "Anthropic",
 	    };
 	    dropdown.addOptions(options);
 	    dropdown.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider);

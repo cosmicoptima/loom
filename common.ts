@@ -1,4 +1,4 @@
-export const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat"];
+export const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat", "anthropic"];
 export type Provider = (typeof PROVIDERS)[number];
 
 type ProviderProps = {
@@ -7,6 +7,7 @@ type ProviderProps = {
   "ocp": { url: string };
   "azure": { url: string };
   "azure-chat": { url: string };
+  "anthropic": { url: string };
 };
 
 type SharedPresetSettings = {
