@@ -1270,7 +1270,7 @@ export default class LoomPlugin extends Plugin {
 	// the tokenization and completion depend on the provider,
 	// so call a different method depending on the provider
 
-  console.log("prompt", prompt);
+  // console.log("prompt", prompt);
 
 	const completionMethods: Record<Provider, (prompt: string) => Promise<CompletionResult>> = {
 	  cohere: this.completeCohere,
@@ -1303,7 +1303,7 @@ export default class LoomPlugin extends Plugin {
 	}
 	const rawCompletions = result.completions;
 
-  console.log("rawCompletions", rawCompletions);
+  // console.log("rawCompletions", rawCompletions);
 
 	// escape and clean up the completions
 	const completions = rawCompletions.map((completion: string) => {
@@ -1324,7 +1324,7 @@ export default class LoomPlugin extends Plugin {
     // create a child of the current node for each completion
     let ids = [];
     for (let completion of completions) {
-	  const [id, node] = this.newNode(completion, state.generating, true);
+	  const [id, node] = this.newNode(completion, rootNode, true);
 	  state.nodes[id] = node;
 	  ids.push(id);
     }
