@@ -1287,10 +1287,18 @@ export default class LoomPlugin extends Plugin {
 	  result = await completionMethods[getPreset(this.settings).provider].bind(this)(prompt);
 	} catch (e) {
 	  new Notice(`Error: ${e}`);
+    this.state[file.path].generating = null;
+    this.saveAndRender();
+    this.statusBarItem.style.display = "none";
+
 	  return;
 	}
 	if (!result.ok) {
 	  new Notice(`Error ${result.status}: ${result.message}`);
+    this.state[file.path].generating = null;
+    this.saveAndRender();
+    this.statusBarItem.style.display = "none";
+
 	  return;
 	}
 	const rawCompletions = result.completions;
