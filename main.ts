@@ -195,14 +195,14 @@ export default class LoomPlugin extends Plugin {
 
   newNode(text: string, parentId: string | null, unread: boolean = false): [string, Node] {
     const id = uuidv4();
-	const node: Node = {
-	  text,
-	  parentId,
-	  collapsed: false,
-	  unread,
-	  bookmarked: false,
-	  searchResultState: null,
-	};
+    const node: Node = {
+      text,
+      parentId,
+      collapsed: false,
+      unread,
+      bookmarked: false,
+      searchResultState: null,
+    };
 	return [id, node];
   }
 
@@ -1275,7 +1275,7 @@ export default class LoomPlugin extends Plugin {
 	const completionMethods: Record<Provider, (prompt: string) => Promise<CompletionResult>> = {
 	  cohere: this.completeCohere,
 	  textsynth: this.completeTextSynth,
-      ocp: this.completeOCP,
+    ocp: this.completeOCP,
 	  openai: this.completeOpenAI,
 	  "openai-chat": this.completeOpenAIChat,
 	  azure: this.completeAzure,
@@ -1284,7 +1284,7 @@ export default class LoomPlugin extends Plugin {
 	};
 	let result;
 	try {
-	  result = await completionMethods[getPreset(this.settings).provider].bind(this)(prompt);
+    result = await completionMethods[getPreset(this.settings).provider].bind(this)(prompt);
 	} catch (e) {
 	  new Notice(`Error: ${e}`);
     this.state[file.path].generating = null;
@@ -1324,17 +1324,26 @@ export default class LoomPlugin extends Plugin {
     // create a child of the current node for each completion
     let ids = [];
     for (let completion of completions) {
-	  const [id, node] = this.newNode(completion, rootNode, true);
-	  state.nodes[id] = node;
-	  ids.push(id);
+      const [id, node] = this.newNode(completion, rootNode, true);
+      state.nodes[id] = node;
+      ids.push(id);
     }
 
-    // switch to the first completion
-    this.app.workspace.trigger("loom:switch-to", ids[0]);
+    // switch to the first completion if currently at rootNode
+    // or if rootNode is in the ancestry of the current node
+    if (rootNode && (rootNode === state.current || this.ancestors(file, state.current).includes(rootNode))) {
+      this.app.workspace.trigger("loom:switch-to", ids[0]);
+    }
 
     this.state[file.path].generating = null;
     this.saveAndRender();
     this.statusBarItem.style.display = "none";
+  }
+
+  addNode(file: TFile, text: string, parentId: string | null) {
+    const state = this.state[file.path];
+    const [id, node] = this.newNode(text, parentId, true);
+    state.nodes[id] = node;
   }
 
   async completeCohere(prompt: string) {
@@ -1514,8 +1523,8 @@ export default class LoomPlugin extends Plugin {
         n: this.settings.n,
         temperature: this.settings.temperature,
         top_p: this.settings.topP,
-	    frequency_penalty: this.settings.frequencyPenalty,
-	    presence_penalty: this.settings.presencePenalty,
+	      frequency_penalty: this.settings.frequencyPenalty,
+	      presence_penalty: this.settings.presencePenalty,
 	  });
 	  result = { ok: true, completions: response.data.choices.map((choice) => choice.message?.content || "") };
 	} catch (e) {
@@ -1525,10 +1534,15 @@ export default class LoomPlugin extends Plugin {
   }
 
   async completeAnthropic(prompt: string) {
+    const completions = await Promise.all([...Array(this.settings.n).keys()].map(async () => { return await this.getAnthropicResponse(prompt);} ));
+
+    const result: CompletionResult = { ok: true, completions };
+    return result;
+  }
+
+  async getAnthropicResponse(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
     // let result: CompletionResult;
-
-
     try {
       // console.log("prompt", prompt);
       const response = await requestUrl({
@@ -1551,18 +1565,22 @@ export default class LoomPlugin extends Plugin {
         }),
       });
 
+      if(response.status !== 200) {
+        console.error("response", response);
+        return null;
+      }
       
-      const result: CompletionResult = response.status === 200
-        ? { ok: true, completions: [response.json.content[0]?.text || "<no text>"] }
-        : { ok: false, status: response.status, message: "" };
+      const result = response.json.content[0]?.text || "<no text>";
+
+        // ? { ok: true, completions: [response.json.content[0]?.text || "<no text>"] }
+        // : { ok: false, status: response.status, message: "" };
 
       // console.log("response", result);
 
       return result;
     } catch (e) {
       console.error(e)
-      const result: CompletionResult = { ok: false, status: 400, message: "an error was encountered" };
-      return result;
+      return null;
     }
   }
 
