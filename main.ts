@@ -379,7 +379,7 @@ export default class LoomPlugin extends Plugin {
 	  const panes = this.app.workspace.getLeavesOfType(type);
 	  try {
 		if (panes.length === 0)
-		  this.app.workspace.getRightLeaf(false).setViewState({ type });
+		  this.app.workspace.getRightLeaf(false)?.setViewState({ type });
 	    else if (focus) this.app.workspace.revealLeaf(panes[0]);
 	  } catch (e) {} // expect "TypeError: Cannot read properties of null (reading 'children')"
 	};
