@@ -1423,6 +1423,18 @@ export default class LoomPlugin extends Plugin {
     if (!url.endsWith("/")) url += "/";
 	url = url.replace(/v1\//, "");
     url += "v1/completions";
+    let body: any = {
+      prompt,
+      model: getPreset(this.settings).model, // some providers such as OCP ignore model
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+    }
+    if (this.settings.frequencyPenalty !== 0)
+      body.frequency_penalty = this.settings.frequencyPenalty;
+    if (this.settings.presencePenalty !== 0)
+      body.presence_penalty = this.settings.presencePenalty;
 
     const response = await requestUrl({
 	  url,
@@ -1432,15 +1444,7 @@ export default class LoomPlugin extends Plugin {
         "Content-Type": "application/json",
       },
 	  throw: false,
-      body: JSON.stringify({
-        prompt,
-        max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-	    frequency_penalty: this.settings.frequencyPenalty,
-	    presence_penalty: this.settings.presencePenalty,
-      }),
+      body: JSON.stringify(body),
     });
 
 	const result: CompletionResult = response.status === 200
@@ -1738,7 +1742,7 @@ class LoomSettingTab extends PluginSettingTab {
 	});
 
 	restoreApiKeyDropdown.createEl("option", { text: "OpenAI", attr: { value: "openai" } });
-	restoreApiKeyDropdown.createEl("option", { text: "OpenAI code-davinci-002 Proxy", attr: { value: "ocp" } });
+	restoreApiKeyDropdown.createEl("option", { text: "OpenAI-compatible API", attr: { value: "ocp" } });
 	restoreApiKeyDropdown.createEl("option", { text: "Cohere", attr: { value: "cohere" } });
 	restoreApiKeyDropdown.createEl("option", { text: "TextSynth", attr: { value: "textsynth" } });
 	restoreApiKeyDropdown.createEl("option", { text: "Azure", attr: { value: "azure" } });
@@ -1836,7 +1840,7 @@ class LoomSettingTab extends PluginSettingTab {
 	    const options: Record<string, string> = {
 	  	  cohere: "Cohere",
 	  	  textsynth: "TextSynth",
-	  	  ocp: "OpenAI code-davinci-002 Proxy",
+	  	  ocp: "OpenAI-compatible API",
 	  	  openai: "OpenAI",
 	  	  "openai-chat": "OpenAI (Chat)",
 	  	  azure: "Azure",
