@@ -37,6 +37,7 @@ import { Configuration as AzureConfiguration, OpenAIApi as AzureOpenAIApi} from 
 import { Configuration, OpenAIApi } from "openai";
 import * as cohere from "cohere-ai";
 import Anthropic from '@anthropic-ai/sdk';
+import ollama from "ollama"
 
 
 import cl100k from "gpt-tokenizer";
@@ -190,7 +191,9 @@ export default class LoomPlugin extends Plugin {
 
   apiKeySet() {
 	if (this.settings.modelPreset == -1) return false;
-	return this.settings.modelPresets[this.settings.modelPreset].apiKey != "";
+  const preset =  this.settings.modelPresets[this.settings.modelPreset]
+  if (preset.provider === "ollama") return true
+  return preset.apiKey != ""
   }
 
   newNode(text: string, parentId: string | null, unread: boolean = false): [string, Node] {
@@ -1281,6 +1284,7 @@ export default class LoomPlugin extends Plugin {
 	  azure: this.completeAzure,
 	  "azure-chat": this.completeAzureChat,
     anthropic: this.completeAnthropic,
+    ollama: this.completeOllama,
 	};
 	let result;
 	try {
@@ -1584,6 +1588,17 @@ export default class LoomPlugin extends Plugin {
     }
   }
 
+  async completeOllama(prompt: string) {
+    const completions = []
+    for (let i = 0; i < this.settings.n; i++) {
+      const response = await ollama.generate({ model: getPreset(this.settings).model, prompt, options: { num_predict: this.settings.maxTokens, temperature: this.settings.temperature } })
+      completions.push(response.response)
+    }
+
+    const result: CompletionResult = { ok: true, completions };
+    return result;
+  }
+
   async loadSettings() {
     const settings = (await this.loadData())?.settings || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
@@ -1842,6 +1857,7 @@ class LoomSettingTab extends PluginSettingTab {
 	  	  azure: "Azure",
 	  	  "azure-chat": "Azure (Chat)",
         anthropic: "Anthropic",
+        ollama: "ollama",
 	    };
 	    dropdown.addOptions(options);
 	    dropdown.setValue(this.plugin.settings.modelPresets[this.plugin.settings.modelPreset].provider);
