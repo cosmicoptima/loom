@@ -308,6 +308,8 @@ export class LoomView extends ItemView {
 	  createCheckbox("frequencyPenalty", "Frequency penalty");
 	  createCheckbox("presencePenalty", "Presence penalty");
 	  createCheckbox("prepend", "Prepend sequence");
+	  createCheckbox("systemPrompt", "System prompt");
+	  createCheckbox("userMessage", "User message");
 	}
 	
     // preset dropdown
@@ -371,6 +373,8 @@ export class LoomView extends ItemView {
 	setting("Frequency penalty", "frequencyPenalty", String(settings.frequencyPenalty), "float");
 	setting("Presence penalty", "presencePenalty", String(settings.presencePenalty), "float");
 	setting("Prepend sequence", "prepend", settings.prepend, "string");
+	setting("System prompt", "systemPrompt", settings.systemPrompt, "string");
+	setting("User message", "userMessage", settings.userMessage, "string");
   }
 
   renderBookmarks(container: HTMLElement, state: NoteState) {
