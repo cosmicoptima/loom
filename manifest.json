@@ -1,7 +1,7 @@
 {
 	"id": "loom",
 	"name": "Loom",
-	"version": "1.20.6",
+	"version": "1.20.7",
 	"minAppVersion": "0.15.0",
 	"description": "Loom in Obsidian",
 	"author": "celeste",
