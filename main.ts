@@ -1589,13 +1589,22 @@ export default class LoomPlugin extends Plugin {
   }
 
   async completeOllama(prompt: string) {
-    const completions = []
-    for (let i = 0; i < this.settings.n; i++) {
-      const response = await ollama.generate({ model: getPreset(this.settings).model, prompt, options: { num_predict: this.settings.maxTokens, temperature: this.settings.temperature } })
-      completions.push(response.response)
-    }
-
-    const result: CompletionResult = { ok: true, completions };
+    const completions = await Promise.all(
+      [...Array(this.settings.n).keys()].map(() =>
+        ollama.generate({
+          model: getPreset(this.settings).model,
+          prompt,
+          options: {
+            num_predict: this.settings.maxTokens,
+            temperature: this.settings.temperature,
+          },
+        })
+      )
+    );
+    const result: CompletionResult = {
+      ok: true,
+      completions: completions.map((res) => res.response),
+    };
     return result;
   }
 
