@@ -751,7 +751,7 @@ export const loomEditorPluginSpec: PluginSpec<LoomEditorPlugin> = {
       // the second last element, since the last is `loom__editor-node-hover`
       const className = target.classList[target.classList.length - 2];
       const id = className.split("-").slice(2).join("-");
-      app.workspace.trigger("loom:switch-to", id);
+      this.app.workspace.trigger("loom:switch-to", id);
 
       return true;
     },
