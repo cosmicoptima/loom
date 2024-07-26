@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS: LoomSettings = {
   passageFolder: "",
   defaultPassageSeparator: "\\n\\n---\\n\\n",
   defaultPassageFrontmatter: "%r:\\n",
+  logApiCalls: false,
 
   modelPresets: [],
   modelPreset: -1,
@@ -71,6 +72,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
 	"frequencyPenalty": false,
 	"presencePenalty": false,
 	"prepend": false,
+  "systemPrompt": false,
+  "userMessage": false,
   },
   maxTokens: 60,
   temperature: 1,
@@ -80,6 +83,8 @@ const DEFAULT_SETTINGS: LoomSettings = {
   prepend: "<|endoftext|>",
   bestOf: 0,
   n: 5,
+  systemPrompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with the output of the command.",
+  userMessage: "<cmd>cat untitled.txt</cmd>",
 
   showSettings: false,
   showSearchBar: false,
@@ -173,9 +178,10 @@ export default class LoomPlugin extends Plugin {
       //If not provided, we use node-fetch on Node.js and otherwise expect that fetch is defined globally.
       // expects Promise<Response> as return value
       this.anthropicApiKey = preset.apiKey;
+
       this.anthropic = new Anthropic({
         apiKey: preset.apiKey,
-        // fetch: 
+        // fetch:
         defaultHeaders: {
           'anthropic-version': '2023-06-01',
           'anthropic-beta': 'messages-2023-12-15',
@@ -1257,6 +1263,7 @@ export default class LoomPlugin extends Plugin {
 	this.renderLoomViews();
 
     let prompt = `${this.settings.prepend}${this.fullText(file, rootNode)}`;
+
 	
     // remove a trailing space if there is one
     // store whether there was, so it can be added back post-completion
@@ -1547,8 +1554,20 @@ export default class LoomPlugin extends Plugin {
   async getAnthropicResponse(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
     // let result: CompletionResult;
+    const body = JSON.stringify({
+      model: getPreset(this.settings).model,
+      max_tokens: this.settings.maxTokens,
+      temperature: this.settings.temperature,
+      system: this.settings.systemPrompt,
+      messages: [
+        {"role": "user", "content": `${this.settings.userMessage}`},
+        {"role": "assistant", "content": `${prompt}`}
+      ],
+    }, null, 2);
+    if(this.settings.logApiCalls) {
+      console.log(`request body: ${body}`);
+    }
     try {
-      // console.log("prompt", prompt);
       const response = await requestUrl({
         url: "https://api.anthropic.com/v1/messages",
         method: "POST",
@@ -1557,16 +1576,7 @@ export default class LoomPlugin extends Plugin {
           "anthropic-version": "2023-06-01",
           'x-api-key': this.anthropicApiKey,
         },
-        body: JSON.stringify({
-          model: getPreset(this.settings).model,
-          max_tokens: this.settings.maxTokens,
-          temperature: this.settings.temperature,
-          system: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with the output of the command.",
-          messages: [
-            {"role": "user", "content": `<cmd>cat untitled.txt</cmd>`},
-            {"role": "assistant", "content": `${prompt}`}
-          ],
-        }),
+        body,
       });
 
       if(response.status !== 200) {
@@ -1579,7 +1589,9 @@ export default class LoomPlugin extends Plugin {
         // ? { ok: true, completions: [response.json.content[0]?.text || "<no text>"] }
         // : { ok: false, status: response.status, message: "" };
 
-      // console.log("response", result);
+      if(this.settings.logApiCalls) {
+        console.log(result);
+      }
 
       return result;
     } catch (e) {
@@ -1803,6 +1815,10 @@ class LoomSettingTab extends PluginSettingTab {
         ...preset,
         // @ts-expect-error
         apiKey: this.plugin.settings.anthropicApiKey || "",
+        // // @ts-expect-error
+        // systemPrompt: this.plugin.settings.anthropicSystemPrompt || "",
+        // // @ts-expect-error
+        // userMessage: this.plugin.settings.anthropicUserMessage || "",
       };
       break;
     }
@@ -1934,7 +1950,7 @@ class LoomSettingTab extends PluginSettingTab {
 	const passagesHeader = containerEl.createDiv({ cls: "setting-item setting-item-heading" });
 	passagesHeader.createDiv({ cls: "setting-item-name", text: "Passages" });
 
-    const setting = (
+  const setting = (
 	  name: string,
 	  key: LoomSettingKey,
 	  toText: (value: any) => string,
@@ -1949,20 +1965,41 @@ class LoomSettingTab extends PluginSettingTab {
 	  );
 	}
 
-	const idSetting = (name: string, key: LoomSettingKey) =>
-	  setting(name, key, (value) => value, (text) => text);
+  const idSetting = (name: string, key: LoomSettingKey) =>
+    setting(name, key, (value) => value, (text) => text);
 
-    new Setting(containerEl)
-      .setName("Passage folder location")
-      .setDesc("Passages can be quickly combined into a multipart prompt")
-      .addText((text) =>
-        text.setValue(this.plugin.settings.passageFolder).onChange(async (value) => {
-          this.plugin.settings.passageFolder = value;
-          await this.plugin.save();
-        })
-      );
+  new Setting(containerEl)
+    .setName("Passage folder location")
+    .setDesc("Passages can be quickly combined into a multipart prompt")
+    .addText((text) =>
+      text.setValue(this.plugin.settings.passageFolder).onChange(async (value) => {
+        this.plugin.settings.passageFolder = value;
+        await this.plugin.save();
+      })
+    );
 	
     idSetting("Default passage separator", "defaultPassageSeparator");
     idSetting("Default passage frontmatter", "defaultPassageFrontmatter");
+
+
+    const debugHeader = containerEl.createDiv({ cls: "setting-item setting-item-heading" });
+    debugHeader.createDiv({ cls: "setting-item-name", text: "Debug" });
+  
+    new Setting(containerEl)
+      .setName("Log API calls")
+      .setDesc("Log API calls to the console")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.logApiCalls).onChange(async (value) => {
+          this.plugin.settings.logApiCalls = value;
+          await this.plugin.save();
+        })
+      );
+
+    new Setting(containerEl)  
+    
   }
+
+
+    
+
 }

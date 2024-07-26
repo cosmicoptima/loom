@@ -7,7 +7,7 @@ type ProviderProps = {
   "ocp": { url: string };
   "azure": { url: string };
   "azure-chat": { url: string };
-  "anthropic": { url: string };
+  "anthropic": { url: string };//, systemPrompt: string, userMessage: string };
 };
 
 type SharedPresetSettings = {
@@ -25,6 +25,8 @@ export interface LoomSettings {
   defaultPassageSeparator: string;
   defaultPassageFrontmatter: string;
 
+  logApiCalls: boolean;
+
   modelPresets: ModelPreset<Provider>[];
   modelPreset: number;
 
@@ -37,11 +39,14 @@ export interface LoomSettings {
   prepend: string;
   bestOf: number;
   n: number;
+  systemPrompt: string;
+  userMessage: string;
 
   showSettings: boolean;
   showSearchBar: boolean;
   showNodeBorders: boolean;
   showExport: boolean;
+
 }
 
 export const getPreset = (settings: LoomSettings) => settings.modelPresets[settings.modelPreset];
