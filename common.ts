@@ -1,4 +1,4 @@
-export const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat", "anthropic"];
+export const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat", "anthropic", "ollama"];
 export type Provider = (typeof PROVIDERS)[number];
 
 type ProviderProps = {
