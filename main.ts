@@ -1437,6 +1437,7 @@ export default class LoomPlugin extends Plugin {
       n: this.settings.n,
       temperature: this.settings.temperature,
       top_p: this.settings.topP,
+      best_of: this.settings.bestOf > this.settings.n ? this.settings.bestOf : this.settings.n,
     }
     if (this.settings.frequencyPenalty !== 0)
       body.frequency_penalty = this.settings.frequencyPenalty;
