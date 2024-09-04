@@ -1911,63 +1911,87 @@ class LoomSettingTab extends PluginSettingTab {
     });
 
     fillInModelDropdown.createEl("option", {
-      text: "davinci-002",
-      attr: { value: "davinci-002" },
+      text: "Llama 3.1 405B (Hyperbolic)",
+      attr: { value: "llama-3.1-405b-hyperbolic" },
     });
     fillInModelDropdown.createEl("option", {
-      text: "code-davinci-002",
-      attr: { value: "code-davinci-002" },
+      text: "Llama 3.1 405B (OpenRouter)",
+      attr: { value: "llama-3.1-405b-openrouter" },
     });
     fillInModelDropdown.createEl("option", {
-      text: "code-davinci-002 (Proxy)",
-      attr: { value: "code-davinci-002-proxy" },
+      text: "Claude 3 Opus",
+      attr: { value: "claude-3-opus" },
     });
     fillInModelDropdown.createEl("option", {
-      text: "gpt-4-base",
+      text: "Claude 3.5 Sonnet",
+      attr: { value: "claude-3.5-sonnet" },
+    });
+    fillInModelDropdown.createEl("option", {
+      text: "GPT-4 base",
       attr: { value: "gpt-4-base" },
     });
     fillInModelDropdown.createEl("option", {
-      text: "claude-3-opus",
-      attr: { value: "claude-3-opus" },
+      text: "davinci-002",
+      attr: { value: "davinci-002" },
     });
 
     fillInModelDropdown.addEventListener("change", (event) => {
       const value = (event.target as HTMLSelectElement).value;
       switch (value) {
-        case "davinci-002": {
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].provider = "openai";
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].model = "davinci-002";
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].contextLength = 16384;
-          break;
-        }
-        case "code-davinci-002": {
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].provider = "openai";
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].model = "code-davinci-002";
-          this.plugin.settings.modelPresets[
-            this.plugin.settings.modelPreset
-          ].contextLength = 8001;
-          break;
-        }
-        case "code-davinci-002-proxy": {
+        case "llama-3.1-405b-hyperbolic": {
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
           ].provider = "openai-compat";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          ].model = "code-davinci-002";
+          // @ts-expect-error
+          ].url = "https://api.hyperbolic.xyz";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          ].contextLength = 8001;
+          ].model = "meta-llama/Meta-Llama-3.1-405B";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].contextLength = 32768;
+          break;
+        }
+        case "llama-3.1-405b-openrouter": {
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].provider = "openrouter";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          // @ts-expect-error
+          ].quantization = "bf16";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].model = "meta-llama/llama-3.1-405b";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].contextLength = 32768;
+          break;
+        }
+        case "claude-3-opus": {
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].provider = "anthropic";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].model = "claude-3-opus-20240229";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].contextLength = 50000;
+          break;
+        }
+        case "claude-3.5-sonnet": {
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].provider = "anthropic";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].model = "claude-3-5-sonnet-20240620";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].contextLength = 50000;
           break;
         }
         case "gpt-4-base": {
@@ -1982,16 +2006,16 @@ class LoomSettingTab extends PluginSettingTab {
           ].contextLength = 8192;
           break;
         }
-        case "claude-3-opus": {
+        case "davinci-002": {
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          ].provider = "anthropic";
+          ].provider = "openai";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          ].model = "claude-3-opus-20240229";
+          ].model = "davinci-002";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          ].contextLength = 20000;
+          ].contextLength = 16384;
           break;
         }
       }
