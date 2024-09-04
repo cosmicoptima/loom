@@ -1,13 +1,24 @@
-export const PROVIDERS = ["cohere", "textsynth", "ocp", "openai", "openai-chat", "azure", "azure-chat", "anthropic"];
+export const PROVIDERS = [
+  "cohere",
+  "textsynth",
+  "openai-compat",
+  "openai",
+  "openai-chat",
+  "azure",
+  "azure-chat",
+  "anthropic",
+  "openrouter",
+];
 export type Provider = (typeof PROVIDERS)[number];
 
 type ProviderProps = {
-  "openai": { organization: string };
+  openai: { organization: string };
   "openai-chat": { organization: string };
-  "ocp": { url: string };
-  "azure": { url: string };
+  "openai-compat": { url: string };
+  azure: { url: string };
   "azure-chat": { url: string };
-  "anthropic": { url: string };//, systemPrompt: string, userMessage: string };
+  anthropic: { url: string };
+  openrouter: { quantization: string };
 };
 
 type SharedPresetSettings = {
@@ -18,7 +29,8 @@ type SharedPresetSettings = {
   apiKey: string;
 };
 
-export type ModelPreset<P extends Provider> = SharedPresetSettings & (P extends keyof ProviderProps ? ProviderProps[P] : {}) & { provider: P };
+export type ModelPreset<P extends Provider> = SharedPresetSettings &
+  (P extends keyof ProviderProps ? ProviderProps[P] : {}) & { provider: P };
 
 export interface LoomSettings {
   passageFolder: string;
@@ -46,10 +58,10 @@ export interface LoomSettings {
   showSearchBar: boolean;
   showNodeBorders: boolean;
   showExport: boolean;
-
 }
 
-export const getPreset = (settings: LoomSettings) => settings.modelPresets[settings.modelPreset];
+export const getPreset = (settings: LoomSettings) =>
+  settings.modelPresets[settings.modelPreset];
 
 export type SearchResultState = "result" | "ancestor" | "none" | null;
 
