@@ -1586,6 +1586,8 @@ export default class LoomPlugin extends Plugin {
         method: "POST",
         headers: {
           Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
+          "HTTP-Referer": "https://github.com/cosmicoptima/loom",
+          "X-Title": "Loomsidian",
           "Content-Type": "application/json",
         },
         throw: false,
