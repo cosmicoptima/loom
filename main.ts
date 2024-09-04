@@ -1479,6 +1479,15 @@ export default class LoomPlugin extends Plugin {
       "gpt-3.5-turbo",
       "gpt-3.5-turbo-0301",
       "gpt-4-base",
+      // TODO: llama 3.1 has "28k additional multilingual tokens", so cl100k is not exactly right
+      "meta-llama/llama-3.1-8b",
+      "meta-llama/llama-3.1-70b",
+      "meta-llama/llama-3.1-405b",
+      "meta-llama/llama-3.1-8b-instruct",
+      "meta-llama/llama-3.1-70b-instruct",
+      "meta-llama/llama-3.1-405b-instruct",
+      "meta-llama/Meta-Llama-3.1-405B",
+      "meta-llama/Meta-Llama-3.1-405B-FP8",
     ];
     const p50kModels = [
       "text-davinci-003",
