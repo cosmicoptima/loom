@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-loom",
-	"version": "1.22.2",
+	"version": "1.22.3",
 	"description": "Loom in Obsidian",
 	"main": "main.js",
 	"scripts": {

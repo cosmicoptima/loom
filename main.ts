@@ -1606,15 +1606,15 @@ export default class LoomPlugin extends Plugin {
 
     const responses = await Promise.all(requests);
 
-    const result: CompletionResult = responses.every(response => response.status === 200)
+    const result: CompletionResult = responses.every(response => !response.json.hasOwnProperty('error'))
       ? {
           ok: true,
           completions: responses.map(response => response.json.choices[0].text),
         }
       : {
           ok: false,
-          status: responses[0].status,
-          message: responses[0].text,
+          status: responses[0].json.error.code,
+          message: responses[0].json.error.message,
         };
     return result;
   }
