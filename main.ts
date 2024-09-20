@@ -2102,10 +2102,6 @@ class LoomSettingTab extends PluginSettingTab {
       text: "TextSynth",
       attr: { value: "textsynth" },
     });
-    restoreApiKeyDropdown.createEl("option", {
-      text: "llama.cpp",
-      attr: { value: "llamacpp" },
-    });
 
     restoreApiKeyDropdown.addEventListener("change", (event) => {
       const provider = (event.target as HTMLSelectElement).value as Provider;
@@ -2133,6 +2129,16 @@ class LoomSettingTab extends PluginSettingTab {
             apiKey: this.plugin.settings.ocpApiKey || "",
             // @ts-expect-error
             url: this.plugin.settings.ocpUrl || "",
+          };
+          break;
+        }
+        case "llamacpp": {
+          preset = {
+            ...preset,
+            // @ts-expect-error
+            apiKey: this.plugin.settings.llamacppApiKey || "",
+            // @ts-expect-error
+            url: this.plugin.settings.llamacppUrl || "",
           };
           break;
         }
@@ -2309,7 +2315,7 @@ class LoomSettingTab extends PluginSettingTab {
       }
 
       if (
-        ["openai-compat", "azure", "azure-chat"].includes(
+        ["openai-compat", "llamacpp", "azure", "azure-chat"].includes(
           this.plugin.settings.modelPresets[this.plugin.settings.modelPreset]
             .provider
         )
