@@ -1318,6 +1318,7 @@ export default class LoomPlugin extends Plugin {
     > = {
       cohere: this.completeCohere,
       textsynth: this.completeTextSynth,
+      llamacpp: this.completeLlamaCpp,
       "openai-compat": this.completeOpenAICompat,
       openai: this.completeOpenAI,
       "openai-chat": this.completeOpenAIChat,
@@ -1517,17 +1518,7 @@ export default class LoomPlugin extends Plugin {
     );
   }
 
-  async completeOpenAICompat(prompt: string) {
-    prompt = this.trimOpenAIPrompt(prompt);
-
-    // @ts-expect-error TODO
-    let url = getPreset(this.settings).url;
-
-    if (!(url.startsWith("http://") || url.startsWith("https://")))
-      url = "https://" + url;
-    if (!url.endsWith("/")) url += "/";
-    url = url.replace(/v1\//, "");
-    url += "v1/completions";
+  async completeOpenAICompatHelper(prompt: string, url: string) {
     let body: any = {
       prompt,
       model: getPreset(this.settings).model,
@@ -1545,7 +1536,12 @@ export default class LoomPlugin extends Plugin {
     if (this.settings.presencePenalty !== 0)
       body.presence_penalty = this.settings.presencePenalty;
 
-    const response = await requestUrl({
+    if (this.settings.logApiCalls) {
+      console.log(`completeOpenAICompatHelper sending request body: ${JSON.stringify(body)}`);
+      console.log(`completeOpenAICompatHelper to URL: ${JSON.stringify(url)}`);
+    }
+
+    const response = requestUrl({
       url,
       method: "POST",
       headers: {
@@ -1556,6 +1552,23 @@ export default class LoomPlugin extends Plugin {
       body: JSON.stringify(body),
     });
 
+    return response;
+  }
+
+  async completeOpenAICompat(prompt: string) {
+    prompt = this.trimOpenAIPrompt(prompt);
+
+    // @ts-expect-error TODO
+    let url = getPreset(this.settings).url;
+
+    if (!(url.startsWith("http://") || url.startsWith("https://")))
+      url = "https://" + url;
+    if (!url.endsWith("/")) url += "/";
+    url = url.replace(/v1\//, "");
+    url += "v1/completions";
+    
+    let response = await this.completeOpenAICompatHelper(prompt, url);
+
     const result: CompletionResult =
       response.status === 200
         ? {
@@ -1565,6 +1578,38 @@ export default class LoomPlugin extends Plugin {
             ),
           }
         : { ok: false, status: response.status, message: "" };
+    
+    return result;
+  }
+
+  async completeLlamaCpp(prompt: string) {
+    prompt = this.trimOpenAIPrompt(prompt);
+
+    // @ts-expect-error TODO
+    let url = getPreset(this.settings).url;
+
+    if (!(url.startsWith("http://") || url.startsWith("https://")))
+      url = "https://" + url;
+    
+    url += "v1/completions";
+    
+    let response = await this.completeOpenAICompatHelper(prompt, url);
+
+    if (this.settings.logApiCalls) {
+      console.log(`completeLlamaCppServer got response: ${JSON.stringify(response)}`);
+    }
+
+    const result: CompletionResult =
+      response.status === 200
+        ? {
+            ok: true,
+            // completions: response.json.choices.map(
+            //   (choice: any) => choice.text
+            // ),
+            completions: [response.json.content] // only 1 response
+          }
+        : { ok: false, status: response.status, message: "" };
+    
     return result;
   }
 
@@ -2087,6 +2132,16 @@ class LoomSettingTab extends PluginSettingTab {
           };
           break;
         }
+        case "llamacpp": {
+          preset = {
+            ...preset,
+            // @ts-expect-error
+            apiKey: this.plugin.settings.llamacppApiKey || "",
+            // @ts-expect-error
+            url: this.plugin.settings.llamacppUrl || "",
+          };
+          break;
+        }
         case "cohere": {
           preset = {
             ...preset,
@@ -2176,6 +2231,7 @@ class LoomSettingTab extends PluginSettingTab {
           "azure-chat": "Azure (Chat)",
           cohere: "Cohere",
           textsynth: "TextSynth",
+          llamacpp: "llama.cpp",
         };
         dropdown.addOptions(options);
         dropdown.setValue(
@@ -2259,7 +2315,7 @@ class LoomSettingTab extends PluginSettingTab {
       }
 
       if (
-        ["openai-compat", "azure", "azure-chat"].includes(
+        ["openai-compat", "llamacpp", "azure", "azure-chat"].includes(
           this.plugin.settings.modelPresets[this.plugin.settings.modelPreset]
             .provider
         )

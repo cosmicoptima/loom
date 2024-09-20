@@ -8,6 +8,7 @@ export const PROVIDERS = [
   "azure-chat",
   "anthropic",
   "openrouter",
+  "llamacpp",
 ];
 export type Provider = (typeof PROVIDERS)[number];
 
@@ -15,6 +16,7 @@ type ProviderProps = {
   openai: { organization: string };
   "openai-chat": { organization: string };
   "openai-compat": { url: string };
+  "llamacpp": { url: string };
   azure: { url: string };
   "azure-chat": { url: string };
   anthropic: { url: string };
