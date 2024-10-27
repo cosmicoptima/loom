@@ -2301,7 +2301,7 @@ class LoomSettingTab extends PluginSettingTab {
       }
 
       if (
-        ["openai-compat", "openpipe", "azure", "azure-chat"].includes(
+        ["openai-compat", "azure", "azure-chat"].includes(
           this.plugin.settings.modelPresets[this.plugin.settings.modelPreset]
             .provider
         )
