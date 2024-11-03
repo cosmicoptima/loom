@@ -5,6 +5,7 @@ import {
   loomEditorPluginSpec,
   MakePromptFromPassagesModal,
 } from "./views";
+
 import {
   Provider,
   ModelPreset,
@@ -14,6 +15,7 @@ import {
   NoteState,
   getPreset,
 } from "./common";
+
 import {
   App,
   Editor,
@@ -35,14 +37,13 @@ import {
 import { Configuration, OpenAIApi } from "openai";
 import * as cohere from "cohere-ai";
 import Anthropic from "@anthropic-ai/sdk";
-
 import cl100k from "gpt-tokenizer";
 import p50k from "gpt-tokenizer/esm/model/text-davinci-003";
 import r50k from "gpt-tokenizer/esm/model/davinci";
-
 import * as fs from "fs";
 import { toRoman } from "roman-numerals";
 import { v4 as uuidv4 } from "uuid";
+
 const untildify = require("untildify") as any;
 
 type LoomSettingKey = keyof {
@@ -54,10 +55,15 @@ const DEFAULT_SETTINGS: LoomSettings = {
   defaultPassageSeparator: "\\n\\n---\\n\\n",
   defaultPassageFrontmatter: "%r:\\n",
   logApiCalls: false,
-
-  modelPresets: [],
+  modelPresets: [{
+    name: "Ollama Local",
+    provider: "ollama" as Provider, // Add type assertion
+    model: "nemb",
+    url: "http://0.0.0.0:11434",
+    contextLength: 4096,
+    apiKey: "", // Not needed for local Ollama
+  } as ModelPreset<"ollama">], // Add type assertion
   modelPreset: -1,
-
   visibility: {
     visibility: true,
     modelPreset: true,
@@ -89,11 +95,57 @@ const DEFAULT_SETTINGS: LoomSettings = {
   showExport: false,
 };
 
+
+async function getOllamaCompletion(
+  prompt: string,
+  preset: ModelPreset<"ollama">, // Specify the provider type
+  settings: LoomSettings
+): Promise<CompletionResult> {
+  try {
+    const response = await fetch(`${preset.url}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: preset.model,
+        prompt: prompt,
+        stream: false,
+        options: {
+          temperature: settings.temperature,
+          top_p: settings.topP,
+          num_predict: settings.maxTokens,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        message: `Ollama API error: ${response.statusText}`
+      };
+    }
+
+    const data = await response.json();
+    return {
+      ok: true,
+      completions: [data.response]
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      message: `Error calling Ollama API: ${error.message}`
+    };
+  }
+}
+
 type CompletionResult =
   | { ok: true; completions: string[] }
   | { ok: false; status: number; message: string };
 
-export default class LoomPlugin extends Plugin {
+  export default class LoomPlugin extends Plugin {
   settings: LoomSettings;
   state: Record<string, NoteState>;
 
@@ -153,52 +205,54 @@ export default class LoomPlugin extends Plugin {
   initializeProviders() {
     const preset = getPreset(this.settings);
     if (preset === undefined) return;
-
-    if (["openai", "openai-chat"].includes(preset.provider)) {
-      this.openai = new OpenAIApi(
-        new Configuration({
-          apiKey: preset.apiKey,
-          // @ts-expect-error TODO
-          organization: preset.organization,
-        })
-      );
-    } else if (preset.provider == "cohere") cohere.init(preset.apiKey);
-    else if (preset.provider == "azure") {
-      // @ts-expect-error TODO
-      const url = preset.url;
-
-      if (!preset.apiKey || !url) return;
-      this.azure = new AzureOpenAIApi(
-        new AzureConfiguration({
-          apiKey: preset.apiKey,
-          azure: {
+    
+    switch (preset.provider) {
+      case "openai":
+      case "openai-chat":
+        this.openai = new OpenAIApi(
+          new Configuration({
             apiKey: preset.apiKey,
-            endpoint: url,
+            organization: preset.organization,
+          })
+        );
+        break;
+        
+      case "cohere":
+        cohere.init(preset.apiKey);
+        break;
+        
+      case "azure":
+        this.azure = new AzureOpenAIApi(
+          new AzureConfiguration({
+            apiKey: preset.apiKey,
+            azure: {
+              apiKey: preset.apiKey,
+              endpoint: preset.url,
+            },
+          })
+        );
+        break;
+        
+      case "anthropic":
+        this.anthropic = new Anthropic({
+          apiKey: preset.apiKey,
+          defaultHeaders: {
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "messages-2023-12-15",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Credentials": "true",
           },
-        })
-      );
-    } else if (preset.provider == "anthropic") {
-      //(property) ClientOptions.fetch?: Fetch | undefined
-      //Specify a custom fetch function implementation.
-      //If not provided, we use node-fetch on Node.js and otherwise expect that fetch is defined globally.
-      // expects Promise<Response> as return value
-      this.anthropicApiKey = preset.apiKey;
-
-      this.anthropic = new Anthropic({
-        apiKey: preset.apiKey,
-        // fetch:
-        defaultHeaders: {
-          "anthropic-version": "2023-06-01",
-          "anthropic-beta": "messages-2023-12-15",
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "*",
-          "Access-Control-Allow-Methods": "*",
-          "Access-Control-Allow-Credentials": "true",
-        },
-      });
+        });
+        break;
+        
+      case "ollama":
+        // No initialization needed for Ollama
+        break;
     }
   }
-
+  
   apiKeySet() {
     if (this.settings.modelPreset == -1) return false;
     return this.settings.modelPresets[this.settings.modelPreset].apiKey != "";
@@ -222,6 +276,18 @@ export default class LoomPlugin extends Plugin {
   }
 
   initializeNoteState(file: TFile) {
+    // Check if editor exists before accessing it
+    if (!this.editor) {
+      // Get the active editor view
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView) {
+        this.editor = activeView.editor;
+      } else {
+        // Handle case where no editor is available
+        return;
+      }
+    }
+  
     const [rootId, root] = this.newNode(this.editor.getValue(), null);
     this.state[file.path] = {
       current: rootId,
@@ -232,7 +298,7 @@ export default class LoomPlugin extends Plugin {
     };
     this.saveAndRender();
   }
-
+  
   ancestors(file: TFile, id: string): string[] {
     const state = this.state[file.path];
     let ancestors = [];
@@ -318,9 +384,48 @@ export default class LoomPlugin extends Plugin {
     await this.loadSettings();
     await this.loadState();
 
+    // Initialize empty state if needed
+    if (!this.state) {
+        this.state = {};
+    }
+
+    // Define pane opening functions first
+    const openPane = (type: string, focus: boolean) => {
+        try {
+            const panes = this.app.workspace.getLeavesOfType(type);
+            if (panes.length === 0) {
+                const leaf = this.app.workspace.getRightLeaf(false);
+                if (leaf) {
+                    leaf.setViewState({ type });
+                }
+            } else if (focus) {
+                this.app.workspace.revealLeaf(panes[0]);
+            }
+        } catch (e) {
+            console.error(`Error opening ${type} pane:`, e);
+        }
+    };
+
+    const openLoomPane = (focus: boolean) => openPane("loom", focus);
+    const openLoomSiblingsPane = (focus: boolean) => openPane("loom-siblings", focus);
+
+    this.registerView(
+        "loom",
+        (leaf) => new LoomView(leaf, () => this.withFile((file) => this.state[file.path]), () => this.settings)
+    );
+
+    this.registerView(
+        "loom-siblings",
+        (leaf) => new LoomSiblingsView(leaf, () => this.withFile((file) => this.state[file.path]))
+    );
+
+    this.app.workspace.onLayoutReady(() => {
+        openLoomPane(true);
+        openLoomSiblingsPane(false);
+    });
+
     this.app.workspace.trigger("parse-style-settings");
     this.addSettingTab(new LoomSettingTab(this.app, this));
-
     this.initializeProviders();
 
     this.statusBarItem = this.addStatusBarItem();
@@ -395,18 +500,6 @@ export default class LoomPlugin extends Plugin {
       if (!checking) callback(state);
       return true;
     };
-
-    const openPane = (type: string, focus: boolean) => {
-      const panes = this.app.workspace.getLeavesOfType(type);
-      try {
-        if (panes.length === 0)
-          this.app.workspace.getRightLeaf(false)?.setViewState({ type });
-        else if (focus) this.app.workspace.revealLeaf(panes[0]);
-      } catch (e) {} // expect "TypeError: Cannot read properties of null (reading 'children')"
-    };
-    const openLoomPane = (focus: boolean) => openPane("loom", focus);
-    const openLoomSiblingsPane = (focus: boolean) =>
-      openPane("loom-siblings", focus);
 
     this.addCommand({
       id: "create-child",
@@ -647,15 +740,6 @@ export default class LoomPlugin extends Plugin {
       callback: () =>
         this.wftsar((file) => (this.state[file.path].hoisted = [])),
     });
-
-    this.registerView(
-      "loom",
-      (leaf) => new LoomView(leaf, getState, getSettings)
-    );
-    this.registerView(
-      "loom-siblings",
-      (leaf) => new LoomSiblingsView(leaf, getState)
-    );
 
     openLoomPane(true);
     openLoomSiblingsPane(false);
@@ -1520,13 +1604,17 @@ export default class LoomPlugin extends Plugin {
   async completeOpenAICompat(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
 
-    // @ts-expect-error TODO
     let url = getPreset(this.settings).url;
 
-    if (!(url.startsWith("http://") || url.startsWith("https://")))
-      url = "https://" + url;
-    if (!url.endsWith("/")) url += "/";
-    url = url.replace(/v1\//, "");
+    if (url) {
+      if (!(url.startsWith("http://") || url.startsWith("https://"))) {
+        url = `http://${url}`;
+      }
+      if (!url.endsWith("/")) {
+        url += "/";
+      }
+      url = url.replace(/v1\//, "");
+    }  
     url += "v1/completions";
     let body: any = {
       prompt,
@@ -1546,7 +1634,7 @@ export default class LoomPlugin extends Plugin {
       body.presence_penalty = this.settings.presencePenalty;
 
     const response = await requestUrl({
-      url,
+      url: url || '',
       method: "POST",
       headers: {
         Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
@@ -1580,7 +1668,6 @@ export default class LoomPlugin extends Plugin {
       top_p: this.settings.topP,
       best_of: this.settings.bestOf,
       provider: {
-        // @ts-expect-error
         quantizations: [getPreset(this.settings).quantization]
       }
     };
@@ -1944,7 +2031,6 @@ class LoomSettingTab extends PluginSettingTab {
           ].provider = "openai-compat";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          // @ts-expect-error
           ].url = "https://api.hyperbolic.xyz";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
@@ -1960,7 +2046,6 @@ class LoomSettingTab extends PluginSettingTab {
           ].provider = "openrouter";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
-          // @ts-expect-error
           ].quantization = "bf16";
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
@@ -2245,13 +2330,11 @@ class LoomSettingTab extends PluginSettingTab {
             .setValue(
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
-              ].organization
+              ]?.organization || ''             
             )
             .onChange(async (value) => {
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
               ].organization = value;
               await this.plugin.save();
             })
@@ -2269,13 +2352,11 @@ class LoomSettingTab extends PluginSettingTab {
             .setValue(
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
-              ].url
+              ]?.url || ''            
             )
             .onChange(async (value) => {
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
               ].url = value;
               await this.plugin.save();
             })
@@ -2295,13 +2376,11 @@ class LoomSettingTab extends PluginSettingTab {
             .setValue(
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
-              ].quantization
+              ]?.quantization || ''
             )
             .onChange(async (value) => {
               this.plugin.settings.modelPresets[
                 this.plugin.settings.modelPreset
-              // @ts-expect-error TODO
               ].quantization = value;
               await this.plugin.save();
             })

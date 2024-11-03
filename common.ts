@@ -1,3 +1,4 @@
+// In common.ts
 export const PROVIDERS = [
   "cohere",
   "textsynth",
@@ -8,6 +9,7 @@ export const PROVIDERS = [
   "azure-chat",
   "anthropic",
   "openrouter",
+  "ollama"  // Add this
 ];
 export type Provider = (typeof PROVIDERS)[number];
 
@@ -19,6 +21,7 @@ type ProviderProps = {
   "azure-chat": { url: string };
   anthropic: { url: string };
   openrouter: { quantization: string };
+  ollama: { url: string };  // Add this
 };
 
 type SharedPresetSettings = {
@@ -29,8 +32,14 @@ type SharedPresetSettings = {
   apiKey: string;
 };
 
-export type ModelPreset<P extends Provider> = SharedPresetSettings &
-  (P extends keyof ProviderProps ? ProviderProps[P] : {}) & { provider: P };
+// In common.ts
+export type ModelPreset<P extends Provider> = SharedPresetSettings & {
+  provider: P;
+  // Add missing properties
+  organization?: string;  // For OpenAI
+  url?: string;          // For Ollama, Azure, etc.
+  quantization?: string; // For OpenRouter
+};
 
 export interface LoomSettings {
   passageFolder: string;
