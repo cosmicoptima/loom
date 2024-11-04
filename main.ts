@@ -145,7 +145,7 @@ type CompletionResult =
   | { ok: true; completions: string[] }
   | { ok: false; status: number; message: string };
 
-  export default class LoomPlugin extends Plugin {
+export default class LoomPlugin extends Plugin {
   settings: LoomSettings;
   state: Record<string, NoteState>;
 
