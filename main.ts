@@ -1325,6 +1325,7 @@ export default class LoomPlugin extends Plugin {
       "azure-chat": this.completeAzureChat,
       anthropic: this.completeAnthropic,
       openrouter: this.completeOpenRouter,
+      deepseek: this.completeDeepseek,
     };
     let result;
     try {
@@ -1565,6 +1566,77 @@ export default class LoomPlugin extends Plugin {
             ),
           }
         : { ok: false, status: response.status, message: "" };
+    return result;
+  }
+
+  async completeDeepseek(prompt: string) {
+    const completionResults = await Promise.all(
+      [...Array(this.settings.n).keys()].map(async () => {
+        return await this.getDeepseekResponse(prompt);
+      })
+    );
+
+    const completions = [];
+    for (const completion of completionResults) {
+      if (!completion.ok) {
+        return completion;
+      } else {
+        completions.push(completion.completions[0]);
+      }
+    }
+    const okayResult: CompletionResult = { ok: true, completions };
+    return okayResult;
+  }
+  
+  async getDeepseekResponse(prompt: string) {
+    prompt = this.trimOpenAIPrompt(prompt);
+
+    const url = "https://api.deepseek.com/beta/chat/completions";
+
+    const body: any = {
+      system: this.settings.systemPrompt,
+      messages: [
+        { role: "user", content: `${this.settings.userMessage}` },
+        { role: "assistant", content: `${prompt}`, prefix: true },
+      ],
+      model: getPreset(this.settings).model,
+      max_tokens: this.settings.maxTokens,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+    };
+
+    if (this.settings.frequencyPenalty !== 0)
+      body.frequency_penalty = this.settings.frequencyPenalty;
+    if (this.settings.presencePenalty !== 0)
+      body.presence_penalty = this.settings.presencePenalty;
+
+    if (this.settings.logApiCalls) {
+      console.log(`request body: ${JSON.stringify(body)}`);
+    }
+
+    const response = await requestUrl({
+      url,
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
+        "Content-Type": "application/json",
+      },
+      throw: false,
+      body: JSON.stringify(body),
+    });
+
+    const result: CompletionResult =
+      response.status === 200
+        ? {
+            ok: true,
+            completions: response.json.choices.map(
+              (choice: any) => choice.message.content
+            ),
+          }
+        : { ok: false, status: response.status, message: response.json.error.message };
+    if (this.settings.logApiCalls) {
+      console.log(`result: ${JSON.stringify(response)}`);
+    }
     return result;
   }
 
@@ -1934,6 +2006,10 @@ class LoomSettingTab extends PluginSettingTab {
       text: "davinci-002",
       attr: { value: "davinci-002" },
     });
+    fillInModelDropdown.createEl("option", {
+      text: "DeepSeek V3 Chat",
+      attr: { value: "deepseek-v3-chat" },
+    });
 
     fillInModelDropdown.addEventListener("change", (event) => {
       const value = (event.target as HTMLSelectElement).value;
@@ -2016,6 +2092,18 @@ class LoomSettingTab extends PluginSettingTab {
           this.plugin.settings.modelPresets[
             this.plugin.settings.modelPreset
           ].contextLength = 16384;
+          break;
+        }
+        case "deepseek-v3-chat": {
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].provider = "deepseek";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].model = "deepseek-chat";
+          this.plugin.settings.modelPresets[
+            this.plugin.settings.modelPreset
+          ].contextLength = 128000;
           break;
         }
       }
@@ -2125,6 +2213,14 @@ class LoomSettingTab extends PluginSettingTab {
           };
           break;
         }
+        case "deepseek": {
+          preset = {
+            ...preset,
+            // @ts-expect-error
+            apiKey: this.plugin.settings.deepseekApiKey || "",
+          };
+          break;
+        }
         default: {
           throw new Error(`Unknown provider: ${provider}`);
         }
@@ -2170,6 +2266,7 @@ class LoomSettingTab extends PluginSettingTab {
           "openai-compat": "OpenAI-compatible API",
           "openrouter": "OpenRouter",
           anthropic: "Anthropic",
+          deepseek: "DeepSeek",
           openai: "OpenAI",
           "openai-chat": "OpenAI (Chat)",
           azure: "Azure",
