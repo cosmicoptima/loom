@@ -147,7 +147,7 @@ export default class LoomPlugin extends Plugin {
     const views = this.app.workspace
       .getLeavesOfType("loom-siblings")
       .map((leaf) => leaf.view) as LoomSiblingsView[];
-    views.forEach((view) => view.render());
+    //views.forEach((view) => view.render());
   }
 
   initializeProviders() {
@@ -815,6 +815,7 @@ export default class LoomPlugin extends Plugin {
           //               return;
           //       }
           // this.editor.setCursor(cursor);
+          this.saveAndRender(); // Add explicit view refresh
         })
       )
     );
@@ -1294,7 +1295,7 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].generating = rootNode;
 
     // show the "Generating..." indicator in the loom view
-    this.renderLoomViews();
+    this.refreshViews();
 
     let prompt = `${this.settings.prepend}${this.fullText(file, rootNode)}`;
 
@@ -1401,6 +1402,19 @@ export default class LoomPlugin extends Plugin {
   }
 
   async completeCohere(prompt: string) {
+    if (this.settings.logApiCalls) {
+      console.log("Cohere request:", {
+        model: getPreset(this.settings).model,
+        prompt,
+        max_tokens: this.settings.maxTokens,
+        num_generations: this.settings.n,
+        temperature: this.settings.temperature,
+        p: this.settings.topP,
+        frequency_penalty: this.settings.frequencyPenalty,
+        presence_penalty: this.settings.presencePenalty,
+      });
+    }
+
     const tokens = (await cohere.tokenize({ text: prompt })).body.token_strings;
     prompt = tokens.slice(-getPreset(this.settings).contextLength).join("");
 
@@ -1415,6 +1429,10 @@ export default class LoomPlugin extends Plugin {
       presence_penalty: this.settings.presencePenalty,
     });
 
+    if (this.settings.logApiCalls) {
+      console.log("Cohere response:", response);
+    }
+
     const result: CompletionResult =
       response.statusCode === 200
         ? {
@@ -1423,17 +1441,30 @@ export default class LoomPlugin extends Plugin {
               (generation) => generation.text
             ),
           }
-        :
-          {
+        : {
             ok: false,
             status: response.statusCode!,
-            // @ts-expect-error
             message: response.body.message,
           };
     return result;
   }
 
   async completeTextSynth(prompt: string) {
+    const body = {
+      prompt,
+      max_tokens: this.settings.maxTokens,
+      best_of: this.settings.bestOf,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+      frequency_penalty: this.settings.frequencyPenalty,
+      presence_penalty: this.settings.presencePenalty,
+    };
+
+    if (this.settings.logApiCalls) {
+      console.log("TextSynth request:", body);
+    }
+
     const response = await requestUrl({
       url: `https://api.textsynth.com/v1/engines/${
         getPreset(this.settings).model
@@ -1444,17 +1475,12 @@ export default class LoomPlugin extends Plugin {
         Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
       },
       throw: false,
-      body: JSON.stringify({
-        prompt,
-        max_tokens: this.settings.maxTokens,
-        best_of: this.settings.bestOf,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-        frequency_penalty: this.settings.frequencyPenalty,
-        presence_penalty: this.settings.presencePenalty,
-      }),
+      body: JSON.stringify(body),
     });
+
+    if (this.settings.logApiCalls) {
+      console.log("TextSynth response:", response);
+    }
 
     let result: CompletionResult;
     if (response.status === 200) {
@@ -1528,6 +1554,7 @@ export default class LoomPlugin extends Plugin {
     if (!url.endsWith("/")) url += "/";
     url = url.replace(/v1\//, "");
     url += "v1/completions";
+    
     let body: any = {
       prompt,
       model: getPreset(this.settings).model,
@@ -1535,15 +1562,21 @@ export default class LoomPlugin extends Plugin {
       n: this.settings.n,
       temperature: this.settings.temperature,
       top_p: this.settings.topP,
-      best_of:
-        this.settings.bestOf > this.settings.n
-          ? this.settings.bestOf
-          : this.settings.n,
     };
+    if (this.settings.bestOf > this.settings.n) {
+      body.best_of = this.settings.bestOf;
+    }
     if (this.settings.frequencyPenalty !== 0)
       body.frequency_penalty = this.settings.frequencyPenalty;
     if (this.settings.presencePenalty !== 0)
       body.presence_penalty = this.settings.presencePenalty;
+
+    if (this.settings.logApiCalls) {
+      console.log("OpenAI-compatible API request:", {
+        url,
+        body
+      });
+    }
 
     const response = await requestUrl({
       url,
@@ -1556,6 +1589,10 @@ export default class LoomPlugin extends Plugin {
       body: JSON.stringify(body),
     });
 
+    if (this.settings.logApiCalls) {
+      console.log("OpenAI-compatible API response:", response);
+    }
+
     const result: CompletionResult =
       response.status === 200
         ? {
@@ -1564,7 +1601,16 @@ export default class LoomPlugin extends Plugin {
               (choice: any) => choice.text
             ),
           }
-        : { ok: false, status: response.status, message: "" };
+        : { 
+            ok: false, 
+            status: response.status, 
+            message: response.json?.error?.message || "Unknown error" 
+          };
+
+    if (!result.ok && this.settings.logApiCalls) {
+      console.error("OpenAI-compatible error:", response);
+    }
+
     return result;
   }
 
@@ -1589,6 +1635,10 @@ export default class LoomPlugin extends Plugin {
     if (this.settings.presencePenalty !== 0)
       body.presence_penalty = this.settings.presencePenalty;
 
+    if (this.settings.logApiCalls) {
+      console.log("OpenRouter request:", body);
+    }
+
     const requests = Array(this.settings.n).fill(null).map(() =>
       requestUrl({
         url: "https://openrouter.ai/api/v1/completions",
@@ -1606,6 +1656,10 @@ export default class LoomPlugin extends Plugin {
 
     const responses = await Promise.all(requests);
 
+    if (this.settings.logApiCalls) {
+      console.log("OpenRouter responses:", responses);
+    }
+
     const result: CompletionResult = responses.every(response => !response.json.hasOwnProperty('error'))
       ? {
           ok: true,
@@ -1621,23 +1675,35 @@ export default class LoomPlugin extends Plugin {
 
   async completeOpenAI(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
+    const body = {
+      model: getPreset(this.settings).model,
+      prompt,
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+      frequency_penalty: this.settings.frequencyPenalty,
+      presence_penalty: this.settings.presencePenalty,
+    };
+
+    if (this.settings.logApiCalls) {
+      console.log("OpenAI request:", body);
+    }
+
     let result: CompletionResult;
     try {
-      const response = await this.openai.createCompletion({
-        model: getPreset(this.settings).model,
-        prompt,
-        max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-        frequency_penalty: this.settings.frequencyPenalty,
-        presence_penalty: this.settings.presencePenalty,
-      });
+      const response = await this.openai.createCompletion(body);
+      if (this.settings.logApiCalls) {
+        console.log("OpenAI response:", response);
+      }
       result = {
         ok: true,
         completions: response.data.choices.map((choice) => choice.text || ""),
       };
     } catch (e) {
+      if (this.settings.logApiCalls) {
+        console.error("OpenAI error:", e);
+      }
       result = {
         ok: false,
         status: e.response.status,
@@ -1649,18 +1715,27 @@ export default class LoomPlugin extends Plugin {
 
   async completeOpenAIChat(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
+    const body = {
+      model: getPreset(this.settings).model,
+      messages: [{ role: "assistant", content: prompt }],
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+      frequency_penalty: this.settings.frequencyPenalty,
+      presence_penalty: this.settings.presencePenalty,
+    };
+
+    if (this.settings.logApiCalls) {
+      console.log("OpenAI Chat request:", body);
+    }
+
     let result: CompletionResult;
     try {
-      const response = await this.openai.createChatCompletion({
-        model: getPreset(this.settings).model,
-        messages: [{ role: "assistant", content: prompt }],
-        max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-        frequency_penalty: this.settings.frequencyPenalty,
-        presence_penalty: this.settings.presencePenalty,
-      });
+      const response = await this.openai.createChatCompletion(body);
+      if (this.settings.logApiCalls) {
+        console.log("OpenAI Chat response:", response);
+      }
       result = {
         ok: true,
         completions: response.data.choices.map(
@@ -1668,6 +1743,9 @@ export default class LoomPlugin extends Plugin {
         ),
       };
     } catch (e) {
+      if (this.settings.logApiCalls) {
+        console.error("OpenAI Chat error:", e);
+      }
       result = {
         ok: false,
         status: e.response.status,
@@ -1679,23 +1757,35 @@ export default class LoomPlugin extends Plugin {
 
   async completeAzure(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
+    const body = {
+      model: getPreset(this.settings).model,
+      prompt,
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+      frequency_penalty: this.settings.frequencyPenalty,
+      presence_penalty: this.settings.presencePenalty,
+    };
+
+    if (this.settings.logApiCalls) {
+      console.log("Azure request:", body);
+    }
+
     let result: CompletionResult;
     try {
-      const response = await this.azure.createCompletion({
-        model: getPreset(this.settings).model,
-        prompt,
-        max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-        frequency_penalty: this.settings.frequencyPenalty,
-        presence_penalty: this.settings.presencePenalty,
-      });
+      const response = await this.azure.createCompletion(body);
+      if (this.settings.logApiCalls) {
+        console.log("Azure response:", response);
+      }
       result = {
         ok: true,
         completions: response.data.choices.map((choice) => choice.text || ""),
       };
     } catch (e) {
+      if (this.settings.logApiCalls) {
+        console.error("Azure error:", e);
+      }
       result = {
         ok: false,
         status: e.response.status,
@@ -1707,18 +1797,27 @@ export default class LoomPlugin extends Plugin {
 
   async completeAzureChat(prompt: string) {
     prompt = this.trimOpenAIPrompt(prompt);
+    const body = {
+      model: getPreset(this.settings).model,
+      messages: [{ role: "assistant", content: prompt }],
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP,
+      frequency_penalty: this.settings.frequencyPenalty,
+      presence_penalty: this.settings.presencePenalty,
+    };
+
+    if (this.settings.logApiCalls) {
+      console.log("Azure Chat request:", body);
+    }
+
     let result: CompletionResult;
     try {
-      const response = await this.azure.createChatCompletion({
-        model: getPreset(this.settings).model,
-        messages: [{ role: "assistant", content: prompt }],
-        max_tokens: this.settings.maxTokens,
-        n: this.settings.n,
-        temperature: this.settings.temperature,
-        top_p: this.settings.topP,
-        frequency_penalty: this.settings.frequencyPenalty,
-        presence_penalty: this.settings.presencePenalty,
-      });
+      const response = await this.azure.createChatCompletion(body);
+      if (this.settings.logApiCalls) {
+        console.log("Azure Chat response:", response);
+      }
       result = {
         ok: true,
         completions: response.data.choices.map(
@@ -1726,6 +1825,9 @@ export default class LoomPlugin extends Plugin {
         ),
       };
     } catch (e) {
+      if (this.settings.logApiCalls) {
+        console.error("Azure Chat error:", e);
+      }
       result = {
         ok: false,
         status: e.response.status,
@@ -1811,6 +1913,29 @@ export default class LoomPlugin extends Plugin {
   async save() {
     await this.saveData({ settings: this.settings, state: this.state });
     this.initializeProviders();
+  }
+
+  // Add this new method to properly refresh all views
+  private refreshViews() {
+    // Refresh Loom views
+    this.app.workspace.getLeavesOfType("loom").forEach((leaf) => {
+      if (leaf.view instanceof LoomView) {
+        leaf.view.render();
+      }
+    });
+
+    // Refresh Loom siblings views  
+    this.app.workspace.getLeavesOfType("loom-siblings").forEach((leaf) => {
+      if (leaf.view instanceof LoomSiblingsView) {
+        leaf.view.render();
+      }
+    });
+  }
+
+  // Update saveAndRender to use the new refresh method
+  async saveAndRender() {
+    await this.save();
+    this.refreshViews();
   }
 }
 
