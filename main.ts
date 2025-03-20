@@ -113,18 +113,6 @@ export default class LoomPlugin extends Plugin {
     return callback(file);
   }
 
-  saveAndRender() {
-    this.save();
-
-    if (this.rendering) return;
-    this.rendering = true;
-
-    this.renderLoomViews();
-    this.renderLoomSiblingsViews();
-
-    this.rendering = false;
-  }
-
   thenSaveAndRender(callback: () => void) {
     callback();
     this.saveAndRender();
@@ -134,20 +122,6 @@ export default class LoomPlugin extends Plugin {
     this.thenSaveAndRender(() => {
       this.withFile(callback);
     });
-  }
-
-  renderLoomViews() {
-    const views = this.app.workspace
-      .getLeavesOfType("loom")
-      .map((leaf) => leaf.view) as LoomView[];
-    views.forEach((view) => view.render());
-  }
-
-  renderLoomSiblingsViews() {
-    const views = this.app.workspace
-      .getLeavesOfType("loom-siblings")
-      .map((leaf) => leaf.view) as LoomSiblingsView[];
-    //views.forEach((view) => view.render());
   }
 
   initializeProviders() {
@@ -1220,8 +1194,7 @@ export default class LoomPlugin extends Plugin {
       };
       plugin.update();
 
-      this.renderLoomViews();
-      this.renderLoomSiblingsViews();
+      this.refreshViews();
     };
 
     this.registerEvent(
@@ -1238,8 +1211,7 @@ export default class LoomPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("resize", () => {
-        this.renderLoomViews();
-        this.renderLoomSiblingsViews();
+        this.refreshViews();
       })
     );
 
@@ -1444,7 +1416,7 @@ export default class LoomPlugin extends Plugin {
         : {
             ok: false,
             status: response.statusCode!,
-            message: response.body.message,
+            message: "",
           };
     return result;
   }
@@ -1491,7 +1463,7 @@ export default class LoomPlugin extends Plugin {
       result = {
         ok: false,
         status: response.status,
-        message: response.json.error,
+        message: response.json.error || "Unknown error",
       };
     }
     return result;
@@ -1707,7 +1679,7 @@ export default class LoomPlugin extends Plugin {
       result = {
         ok: false,
         status: e.response.status,
-        message: e.response.data.error.message,
+        message: e.response.data.error.message || "Unknown error",
       };
     }
     return result;
@@ -1717,7 +1689,7 @@ export default class LoomPlugin extends Plugin {
     prompt = this.trimOpenAIPrompt(prompt);
     const body = {
       model: getPreset(this.settings).model,
-      messages: [{ role: "assistant", content: prompt }],
+      messages: [{ role: "assistant" as const, content: prompt }],
       max_tokens: this.settings.maxTokens,
       n: this.settings.n,
       temperature: this.settings.temperature,
@@ -1749,7 +1721,7 @@ export default class LoomPlugin extends Plugin {
       result = {
         ok: false,
         status: e.response.status,
-        message: e.response.data.error.message,
+        message: e.response.data.error.message || "Unknown error",
       };
     }
     return result;
@@ -1789,7 +1761,7 @@ export default class LoomPlugin extends Plugin {
       result = {
         ok: false,
         status: e.response.status,
-        message: e.response.data.error.message,
+        message: e.response.data.error.message || "Unknown error",
       };
     }
     return result;
@@ -1799,7 +1771,7 @@ export default class LoomPlugin extends Plugin {
     prompt = this.trimOpenAIPrompt(prompt);
     const body = {
       model: getPreset(this.settings).model,
-      messages: [{ role: "assistant", content: prompt }],
+      messages: [{ role: "assistant" as const, content: prompt }],
       max_tokens: this.settings.maxTokens,
       n: this.settings.n,
       temperature: this.settings.temperature,
@@ -1831,7 +1803,7 @@ export default class LoomPlugin extends Plugin {
       result = {
         ok: false,
         status: e.response.status,
-        message: e.response.data.error.message,
+        message: e.response.data.error.message || "Unknown error",
       };
     }
     return result;
@@ -1935,7 +1907,13 @@ export default class LoomPlugin extends Plugin {
   // Update saveAndRender to use the new refresh method
   async saveAndRender() {
     await this.save();
+
+    if (this.rendering) return;
+    this.rendering = true;
+
     this.refreshViews();
+
+    this.rendering = false;
   }
 }
 
