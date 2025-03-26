@@ -8,6 +8,7 @@ export const PROVIDERS = [
   "azure-chat",
   "anthropic",
   "openrouter",
+  "openpipe",
 ];
 export type Provider = (typeof PROVIDERS)[number];
 
@@ -19,6 +20,7 @@ type ProviderProps = {
   "azure-chat": { url: string };
   anthropic: { url: string };
   openrouter: { quantization: string };
+  openpipe: { url: string };
 };
 
 type SharedPresetSettings = {

@@ -1298,6 +1298,7 @@ export default class LoomPlugin extends Plugin {
       "azure-chat": this.completeAzureChat,
       anthropic: this.completeAnthropic,
       openrouter: this.completeOpenRouter,
+      openpipe: this.completeOpenPipe,
     };
     let result;
     try {
@@ -1583,6 +1584,46 @@ export default class LoomPlugin extends Plugin {
       console.error("OpenAI-compatible error:", response);
     }
 
+    return result;
+  }
+
+  async completeOpenPipe(prompt: string) {
+    prompt = this.trimOpenAIPrompt(prompt);
+
+    //openpipe doesn't support best-of through the api, according to docs
+    let body: any = {
+      model: getPreset(this.settings).model,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: this.settings.maxTokens,
+      n: this.settings.n,
+      temperature: this.settings.temperature,
+      top_p: this.settings.topP
+    };
+    if (this.settings.frequencyPenalty !== 0)
+      body.frequency_penalty = this.settings.frequencyPenalty;
+    if (this.settings.presencePenalty !== 0)
+      body.presence_penalty = this.settings.presencePenalty;
+
+    const response = await requestUrl({
+      url: "https://api.openpipe.ai/api/v1/chat/completions",
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getPreset(this.settings).apiKey}`,
+        "Content-Type": "application/json",
+      },
+      throw: false,
+      body: JSON.stringify(body),
+    });
+
+    const result: CompletionResult =
+      response.status === 200
+        ? {
+            ok: true,
+            completions: response.json.choices.map(
+              (choice: any) => choice.message.content
+            ),
+          }
+        : { ok: false, status: response.status, message: response.json.error?.message || "" };
     return result;
   }
 
@@ -2272,6 +2313,7 @@ class LoomSettingTab extends PluginSettingTab {
         const options: Record<string, string> = {
           "openai-compat": "OpenAI-compatible API",
           "openrouter": "OpenRouter",
+          openpipe: "OpenPipe",
           anthropic: "Anthropic",
           openai: "OpenAI",
           "openai-chat": "OpenAI (Chat)",
