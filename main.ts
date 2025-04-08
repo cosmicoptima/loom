@@ -1258,7 +1258,10 @@ export default class LoomPlugin extends Plugin {
     await this.generate(file, state.nodes[state.current].parentId);
   }
 
-  async generate(file: TFile, rootNode: string | null) {
+  async generate(file: TFile, rootNode: string | null, remainingCmpl?: number | null) {
+    if (remainingCmpl == null) {
+      remainingCmpl = this.settings.n;
+    }
     // show the "Generating..." indicator in the status bar
     this.statusBarItem.style.display = "inline-flex";
 
@@ -1365,6 +1368,10 @@ export default class LoomPlugin extends Plugin {
     this.state[file.path].generating = null;
     this.saveAndRender();
     this.statusBarItem.style.display = "none";
+
+    if (completions.length > 0 && completions.length < remainingCmpl) {
+      await this.generate(file, rootNode, remainingCmpl - completions.length)
+    }
   }
 
   addNode(file: TFile, text: string, parentId: string | null) {
