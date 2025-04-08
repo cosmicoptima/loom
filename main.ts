@@ -1541,6 +1541,7 @@ export default class LoomPlugin extends Plugin {
       n: this.settings.n,
       temperature: this.settings.temperature,
       top_p: this.settings.topP,
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
     if (this.settings.bestOf > this.settings.n) {
       body.best_of = this.settings.bestOf;
@@ -1607,7 +1608,8 @@ export default class LoomPlugin extends Plugin {
       provider: {
         // @ts-expect-error
         quantizations: [getPreset(this.settings).quantization]
-      }
+      },
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
     if (this.settings.frequencyPenalty !== 0)
       body.frequency_penalty = this.settings.frequencyPenalty;
@@ -1663,6 +1665,7 @@ export default class LoomPlugin extends Plugin {
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
 
     if (this.settings.logApiCalls) {
@@ -1703,6 +1706,7 @@ export default class LoomPlugin extends Plugin {
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
 
     if (this.settings.logApiCalls) {
@@ -1745,6 +1749,7 @@ export default class LoomPlugin extends Plugin {
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
 
     if (this.settings.logApiCalls) {
@@ -1785,6 +1790,7 @@ export default class LoomPlugin extends Plugin {
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      ...JSON.parse(getPreset(this.settings).extraJson),
     };
 
     if (this.settings.logApiCalls) {
@@ -1840,6 +1846,7 @@ export default class LoomPlugin extends Plugin {
           { role: "user", content: `${this.settings.userMessage}` },
           { role: "assistant", content: `${prompt}` },
         ],
+        ...JSON.parse(getPreset(this.settings).extraJson),
       },
       null,
       2
@@ -2008,6 +2015,7 @@ class LoomSettingTab extends PluginSettingTab {
         contextLength: 16384,
         apiKey: "",
         organization: "",
+		extraJson: "{}",
       };
       createPreset(newPreset);
     });
@@ -2417,6 +2425,20 @@ class LoomSettingTab extends PluginSettingTab {
             })
         );
       }
+
+      new Setting(presetFields).setName("Extra JSON").addTextArea((text) =>
+        text
+          .setValue(
+            this.plugin.settings.modelPresets[this.plugin.settings.modelPreset]
+              .extraJson
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.modelPresets[
+              this.plugin.settings.modelPreset
+            ].extraJson = value;
+            await this.plugin.save();
+          })
+      );
     };
 
     const updatePresetList = () => {

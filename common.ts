@@ -27,6 +27,7 @@ type SharedPresetSettings = {
   model: string;
   contextLength: number;
   apiKey: string;
+  extraJson: string;
 };
 
 export type ModelPreset<P extends Provider> = SharedPresetSettings &
